@@ -27,6 +27,7 @@ import {
 import {
   bitmaskParam,
   parseBitmask,
+  techniqueBit,
   toBitmaskFields,
   type BoardResponse,
 } from "../lib/bitmask";
@@ -79,7 +80,9 @@ boardsRouter.get("/", async c => {
       );
     }
     if (bit > 0n) {
-      conditions.push(sql`(${boards.techniques} & ${bitmaskParam(bit)}) != 0`);
+      conditions.push(
+        sql`(${boards.techniques} & ${bitmaskParam(bit)}) <> ${bitmaskParam(0n)}`
+      );
     }
   }
 
@@ -96,7 +99,7 @@ boardsRouter.get("/", async c => {
       // Include both 0 and NULL. Parenthesized so the OR stays grouped when
       // ANDed with the other filters.
       conditions.push(
-        sql`(${boards.techniques} = 0 OR ${boards.techniques} IS NULL)`
+        sql`(${boards.techniques} = ${bitmaskParam(0n)} OR ${boards.techniques} IS NULL)`
       );
     } else {
       conditions.push(sql`${boards.techniques} = ${bitmaskParam(value)}`);
@@ -145,7 +148,9 @@ boardsRouter.get("/counts", async c => {
   const [zeroTechniquesResult] = await db
     .select({ count: sql<number>`count(*)::int` })
     .from(boards)
-    .where(sql`${boards.techniques} = 0 OR ${boards.techniques} IS NULL`);
+    .where(
+      sql`${boards.techniques} = ${bitmaskParam(0n)} OR ${boards.techniques} IS NULL`
+    );
 
   const countsData: BoardCountsData = {
     total: totalResult?.count ?? 0,
@@ -168,13 +173,16 @@ boardsRouter.get("/counts/by-technique", async c => {
 
   // Query count for each technique bit (1-60)
   // TechniqueId enum goes from 1 (FULL_HOUSE) to 60 (GROUPED_X_CYCLES)
-  // Use PostgreSQL native bit shift to avoid JavaScript Number precision loss
-  // for technique IDs >= 53 (where 2^t exceeds Number.MAX_SAFE_INTEGER)
+  // Build each single-technique mask as a bit(128) via bitmaskParam, so ids
+  // beyond 62 work and the id-N-at-position-(127-N) convention stays in one
+  // place. `bit & bit` is a bit, so test for a hit with `<> 0::bit(128)`.
   for (let technique = 1; technique <= 60; technique++) {
     const [result] = await db
       .select({ count: sql<number>`count(*)::int` })
       .from(boards)
-      .where(sql`(${boards.techniques} & (1::bigint << ${technique})) != 0`);
+      .where(
+        sql`(${boards.techniques} & ${bitmaskParam(techniqueBit(technique))}) <> ${bitmaskParam(0n)}`
+      );
     counts[technique] = result?.count ?? 0;
   }
 
@@ -262,7 +270,7 @@ boardsRouter.post("/update-stats", adminMiddleware, async c => {
   const [totalResult] = await db
     .select({ count: sql<number>`count(*)::int` })
     .from(boards)
-    .where(sql`${boards.techniques} > 0`);
+    .where(sql`${boards.techniques} <> ${bitmaskParam(0n)}`);
   const total = totalResult?.count ?? 0;
 
   if (total === 0) {
@@ -277,7 +285,9 @@ boardsRouter.post("/update-stats", adminMiddleware, async c => {
       count: sql<number>`count(*)::int`,
     })
     .from(boards)
-    .where(sql`${boards.level} IS NOT NULL AND ${boards.techniques} > 0`)
+    .where(
+      sql`${boards.level} IS NOT NULL AND ${boards.techniques} <> ${bitmaskParam(0n)}`
+    )
     .groupBy(boards.level);
 
   const levelRatios: Record<number, number> = {};
@@ -301,7 +311,9 @@ boardsRouter.post("/update-stats", adminMiddleware, async c => {
     const [result] = await db
       .select({ count: sql<number>`count(*)::int` })
       .from(boards)
-      .where(sql`(${boards.techniques} & (1::bigint << ${t})) != 0`);
+      .where(
+        sql`(${boards.techniques} & ${bitmaskParam(techniqueBit(t))}) <> ${bitmaskParam(0n)}`
+      );
     const count = result?.count ?? 0;
     if (count > 0) {
       const ratio = count / total;

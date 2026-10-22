@@ -12,7 +12,34 @@ import {
   unique,
   index,
   real,
+  customType,
 } from "drizzle-orm/pg-core";
+
+/**
+ * A technique bitmask column: Postgres `bit(128)`, carried in app code as a JS
+ * `bigint`. Bit N (0-127) = technique id N. Replaces the former signed-64-bit
+ * `bigint` column, whose 2^63-1 ceiling capped the usable ids at ~62; `bit(128)`
+ * lifts that to 127.
+ *
+ * Stored MSB-first, so technique id N is bit-string position `127 - N` — the
+ * same convention as `bitmaskParam()` in src/lib/bitmask.ts, which every SQL
+ * predicate goes through. `toDriver` emits the 128-char binary string Postgres
+ * coerces into the bit column; `fromDriver` parses it back to a bigint.
+ */
+export const techniqueBitmask = customType<{
+  data: bigint;
+  driverData: string;
+}>({
+  dataType() {
+    return "bit(128)";
+  },
+  toDriver(value: bigint): string {
+    return BigInt.asUintN(128, value).toString(2).padStart(128, "0");
+  },
+  fromDriver(value: string): bigint {
+    return value === "" ? 0n : BigInt("0b" + value);
+  },
+});
 
 export const levels = pgTable("levels", {
   level: integer("level").primaryKey(),
@@ -80,10 +107,11 @@ export const boards = pgTable("boards", {
   symmetrical: boolean("symmetrical").default(false),
   board: varchar("board", { length: 81 }).notNull(),
   solution: varchar("solution", { length: 81 }).notNull(),
-  // Technique bitmask, bit N = technique id N. mode "bigint" because values
-  // exceed 2^53; responses go through toBitmaskFields() (src/lib/bitmask.ts),
-  // since JSON.stringify throws on bigint.
-  techniques: bigint("techniques", { mode: "bigint" }).default(0n),
+  // Technique bitmask, bit N = technique id N, as a Postgres bit(128) carried
+  // in app code as a bigint (see techniqueBitmask above). Values exceed 2^53;
+  // responses go through toBitmaskFields() (src/lib/bitmask.ts) since
+  // JSON.stringify throws on bigint.
+  techniques: techniqueBitmask("techniques").default(0n),
   // Sum of every solving step's technique score (ratio scale, Full House = 1);
   // finer-grained companion to `level`. From the solver /validate response.
   difficulty_score: integer("difficulty_score").default(0),
@@ -100,7 +128,7 @@ export const dailies = pgTable("dailies", {
   level: integer("level").references(() => levels.level, {
     onDelete: "set null",
   }),
-  techniques: bigint("techniques", { mode: "bigint" }).default(0n),
+  techniques: techniqueBitmask("techniques").default(0n),
   difficulty_score: integer("difficulty_score").default(0),
   board: varchar("board", { length: 81 }).notNull(),
   solution: varchar("solution", { length: 81 }).notNull(),
@@ -145,9 +173,7 @@ export const techniqueExamples = pgTable("technique_examples", {
   /** Solution for reference */
   solution: varchar("solution", { length: 81 }).notNull(),
   /** Bitfield of ALL techniques applicable at this board state */
-  techniques_bitfield: bigint("techniques_bitfield", {
-    mode: "bigint",
-  }).notNull(),
+  techniques_bitfield: techniqueBitmask("techniques_bitfield").notNull(),
   /** Primary technique (the one solver would use first) */
   primary_technique: integer("primary_technique").notNull(),
   /** Hint data (JSON with areas, cells, description) */
@@ -238,7 +264,7 @@ export const gameSessions = pgTable("game_sessions", {
   solution: varchar("solution", { length: 81 }).notNull(),
   level: integer("level").notNull(),
   difficultyScore: integer("difficulty_score").notNull().default(0),
-  techniques: bigint("techniques", { mode: "bigint" }).default(0n),
+  techniques: techniqueBitmask("techniques").default(0n),
   hintUsed: boolean("hint_used").notNull().default(false),
   hintsCount: integer("hints_count").notNull().default(0),
   hintPointsEarned: integer("hint_points_earned").notNull().default(0),

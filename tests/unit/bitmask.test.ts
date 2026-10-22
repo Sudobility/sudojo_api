@@ -40,9 +40,9 @@ describe("parseBitmask", () => {
   });
 
   it("rejects over-long digit strings without parsing them", () => {
-    // A real bitmask has at most 19 digits (BITMASK_MAX). BigInt() on a
-    // 300k-digit string blocks the event loop for ~1s; 600k+ throws.
-    expect(parseBitmask("0".repeat(19) + "1")).toBeNull();
+    // A real bitmask has at most 39 digits (BITMASK_MAX = 2^128-1). BigInt() on
+    // a 300k-digit string blocks the event loop for ~1s; 600k+ throws.
+    expect(parseBitmask("0".repeat(39) + "1")).toBeNull();
     const started = performance.now();
     expect(parseBitmask("9".repeat(600_000))).toBeNull();
     expect(performance.now() - started).toBeLessThan(50);
@@ -58,9 +58,12 @@ describe("parseBitmask", () => {
     expect(parseBitmask(HIGH)).toBe(HIGH);
   });
 
-  it("accepts the largest value a Postgres BIGINT holds", () => {
-    expect(BITMASK_MAX).toBe(2n ** 63n - 1n);
+  it("accepts the largest value a bit(128) column holds", () => {
+    expect(BITMASK_MAX).toBe(2n ** 128n - 1n);
     expect(parseBitmask(BITMASK_MAX.toString())).toBe(BITMASK_MAX);
+    // A former signed-BIGINT-overflow value (2^63) is now well within range.
+    expect(parseBitmask((2n ** 63n).toString())).toBe(2n ** 63n);
+    expect(parseBitmask(((1n << 127n) | 2n).toString())).toBe((1n << 127n) | 2n);
   });
 
   it.each([
@@ -76,7 +79,7 @@ describe("parseBitmask", () => {
     ["padded string", " 12"],
     ["word", "abc"],
     ["negative bigint", -1n],
-    ["above BIGINT max", (2n ** 63n).toString()],
+    ["above bitmask max (2^128)", (2n ** 128n).toString()],
     ["null", null],
     ["undefined", undefined],
     ["boolean", true],
@@ -95,13 +98,21 @@ describe("techniqueBit", () => {
 });
 
 describe("bitmaskParam", () => {
-  it("binds the value as a decimal string cast to bigint", () => {
+  it("binds the value as a 128-char binary string cast to bit(128)", () => {
     const query = new PgDialect().sqlToQuery(
-      sql`(x & ${bitmaskParam(HIGH)}) != 0`
+      sql`(x & ${bitmaskParam(HIGH)}) <> ${bitmaskParam(0n)}`
     );
-    expect(query.sql).toBe("(x & $1::bigint) != 0");
-    expect(query.params).toEqual([HIGH_STRING]);
+    expect(query.sql).toBe("(x & $1::bit(128)) <> $2::bit(128)");
+    const highBits = HIGH.toString(2).padStart(128, "0");
+    expect(query.params).toEqual([highBits, "0".repeat(128)]);
     expect(typeof query.params[0]).toBe("string");
+    expect((query.params[0] as string).length).toBe(128);
+  });
+
+  it("binds bit 127 without losing bit 1", () => {
+    const mask = (1n << 127n) | 2n;
+    const query = new PgDialect().sqlToQuery(sql`${bitmaskParam(mask)}`);
+    expect(query.params).toEqual(["1" + "0".repeat(125) + "10"]);
   });
 });
 
@@ -140,6 +151,14 @@ describe("toBitmaskFields", () => {
   it("never returns a bigint", () => {
     const out = toBitmaskFields({ techniques: HIGH, techniques_bitfield: 3n });
     expect(() => JSON.stringify(out)).not.toThrow();
+  });
+
+  it("returns an exact 128-bit companion while keeping the legacy number bounded", () => {
+    const mask = (1n << 127n) | 2n;
+    expect(toBitmaskFields({ techniques: mask })).toEqual({
+      techniques: 2,
+      techniques_bitmask: mask.toString(),
+    });
   });
 });
 

@@ -326,7 +326,7 @@ async function main() {
       .where(
         and(
           ne(boards.techniques, 0n),
-          sql`(${boards.techniques} & ${bit}) != 0`
+          sql`(${boards.techniques} & ${bit}) <> ${bitmaskParam(0n)}`
         )
       )
       .limit(100); // Process up to 100 boards per technique

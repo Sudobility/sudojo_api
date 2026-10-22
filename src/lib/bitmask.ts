@@ -1,18 +1,20 @@
 /**
  * @fileoverview Technique bitmasks: parsing, SQL binding, JSON output.
  *
- * A technique bitmask sets bit N for technique id N (1-60). Once any id >= 54
+ * A technique bitmask sets bit N for technique id N (1-127). Once any id >= 54
  * is set the value exceeds 2^53, so a JS number silently drops the low bits
  * (the easy techniques). Inside the API a bitmask is therefore always a
- * `bigint`: Drizzle bitmask columns use `mode: "bigint"`, request fields and
+ * `bigint`: the Drizzle bitmask columns are `bit(128)` (the `techniqueBitmask`
+ * custom type in src/db/schema.ts, carried as a bigint), request fields and
  * query params are parsed with {@link parseBitmask}, and SQL params go through
  * {@link bitmaskParam}.
  *
  * `JSON.stringify` (and so Hono's `c.json`) throws on a `bigint`, and old app
  * builds read `techniques` as a number. Every response therefore goes through
- * {@link toBitmaskFields}: it keeps the numeric field (as lossy as it has
- * always been) and adds an exact decimal-string companion `<field>_bitmask`.
- * Clients should read the companion and parse it with `BigInt(...)`.
+ * {@link toBitmaskFields}: it keeps the numeric field (the low 64 bits, as
+ * lossy as it has always been) and adds an exact decimal-string companion
+ * `<field>_bitmask`. Clients should read the companion and parse it with
+ * `BigInt(...)`.
  */
 
 import { sql, type SQL } from "drizzle-orm";
@@ -24,8 +26,11 @@ import type {
   ValidateBoardData,
 } from "@sudobility/sudojo_types";
 
-/** Largest value a Postgres BIGINT (signed 64-bit) can hold. */
-export const BITMASK_MAX = 2n ** 63n - 1n;
+/**
+ * Largest value a technique bitmask may hold: an unsigned 128-bit value, the
+ * width of the `bit(128)` columns. (Was a signed BIGINT's 2^63-1.)
+ */
+export const BITMASK_MAX = 2n ** 128n - 1n;
 
 /** Digits in {@link BITMASK_MAX}; longer strings are rejected before `BigInt()`. */
 const BITMASK_MAX_DIGITS = BITMASK_MAX.toString().length;
@@ -38,7 +43,7 @@ export type BitmaskField = (typeof BITMASK_FIELDS)[number];
  * Parse a technique bitmask from a request.
  *
  * Accepts a non-negative safe-integer `number`, a base-10 digit string of at
- * most 19 digits, or a `bigint`, up to {@link BITMASK_MAX}. Returns `null` for
+ * most 39 digits, or a `bigint`, up to {@link BITMASK_MAX}. Returns `null` for
  * anything else (negative, fractional, exponent/hex/padded/over-long strings,
  * "", null, ...), so each caller reports the error in its own style.
  *
@@ -76,14 +81,21 @@ export function techniqueBit(techniqueId: number): bigint {
 }
 
 /**
- * Bind a bitmask into raw SQL as a decimal string cast to bigint, e.g.
- * sql`(${boards.techniques} & ${bitmaskParam(bit)}) != 0`.
+ * Bind a bitmask into raw SQL as a `bit(128)` literal, e.g.
+ * sql`(${boards.techniques} & ${bitmaskParam(bit)}) <> ${bitmaskParam(0n)}`.
+ *
+ * The value is sent as its 128-char MSB-first binary string and cast to
+ * bit(128); Postgres coerces the bound string param (verified empirically).
+ * This is the single place the id-N-at-position-(127-N) convention is encoded,
+ * so every bitwise predicate must go through it. Because `bit & bit` yields a
+ * bit, test for a hit with `<> ${bitmaskParam(0n)}`, not `!= 0` (an integer).
  *
  * Never interpolate a JS number here: postgres.js sends it as `'' + x`, and
  * `String(2 ** 60)` is "1152921504606847000" -- not bit 60.
  */
 export function bitmaskParam(value: bigint): SQL {
-  return sql`${value.toString()}::bigint`;
+  const bits = BigInt.asUintN(128, value).toString(2).padStart(128, "0");
+  return sql`${bits}::bit(128)`;
 }
 
 /**
@@ -165,9 +177,11 @@ export type WithBitmaskFields<T> = {
 
 /**
  * Convert a row (or any object) for a JSON response. For every bitmask field
- * present: `field` -> `Number(value)` (kept for old clients; lossy above
- * 2^53), plus `field_bitmask` -> the exact decimal string. Other fields are
- * copied unchanged. Accepts the field as a bigint, number, or decimal string.
+ * present: `field` -> `Number` of the LOW 64 BITS (kept for old clients; lossy
+ * above 2^53 as it has always been, and now capped to 64 bits so a >64-bit
+ * mask never serializes as a ~1e38 number literal), plus `field_bitmask` ->
+ * the exact decimal string of the full value. Other fields are copied
+ * unchanged. Accepts the field as a bigint, number, or decimal string.
  *
  * @throws Error if a bitmask field holds something that is not a bitmask
  */
@@ -189,7 +203,10 @@ export function toBitmaskFields<T extends object>(
     if (bitmask === null) {
       throw new Error(`Invalid ${field} bitmask: ${String(value)}`);
     }
-    out[field] = Number(bitmask);
+    // Low 64 bits only: the legacy numeric field never carries more than a
+    // signed-64-ish value, so a >64-bit mask can't become an unreadable 1e38
+    // number literal for old clients. The exact value is in `_bitmask`.
+    out[field] = Number(BigInt.asUintN(64, bitmask));
     out[`${field}_bitmask`] = bitmask.toString();
   }
   return out as WithBitmaskFields<T>;

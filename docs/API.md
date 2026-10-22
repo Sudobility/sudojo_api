@@ -57,7 +57,7 @@ All API routes live under `/api/v1`; the route modules are mounted in `src/route
 
 ## Technique bitmasks
 
-A technique bitmask sets bit N for technique id N (1–60): `1n << BigInt(id)`. Once any id ≥ 54 is set, the value exceeds 2^53, and `JSON.parse` or a JS `number` silently rounds away the low bits (the easy techniques). The API keeps these values as `bigint` internally and applies one rule at the edges.
+A technique bitmask sets bit N for technique id N (currently 1–60; storage supports ids through 127): `1n << BigInt(id)`. Once any id ≥ 54 is set, the value exceeds 2^53, and `JSON.parse` or a JS `number` silently rounds away the low bits. The API keeps these values as `bigint` internally and stores them in PostgreSQL `bit(128)` columns.
 
 **Responses.** Each bitmask field keeps its numeric form, which old app builds read and which is as lossy as it always was. Each one also gets an exact base-10 string companion:
 
@@ -66,11 +66,11 @@ A technique bitmask sets bit N for technique id N (1–60): `1n << BigInt(id)`. 
 | `techniques` | `techniques_bitmask` | every `/boards` item (list, random, `:uuid`, POST, PUT, DELETE); every `/dailies` item, including the `fallback-<date>` daily; `data.board` of `/solver/validate` and `/solver/generate` |
 | `techniques_bitfield` | `techniques_bitfield_bitmask` | every `/examples` item (list, random, `:uuid`, POST, PUT, DELETE) |
 
-A NULL `techniques` column is `null` in both fields. **JS clients should read `<field>_bitmask` and parse it with `BigInt(...)`**, and test bits with `(mask >> BigInt(id)) & 1n`. Do not read the numeric field. For the two solver routes, the API takes the solver's own `techniques_bitmask` when present and otherwise falls back to `BigInt(techniques)`: for an older solver deployment that can lack low bits, but it never invents any.
+A NULL `techniques` column is `null` in both fields. **JS clients should read `<field>_bitmask` and parse it with `BigInt(...)`**, and test bits with `(mask >> BigInt(id)) & 1n`. The legacy numeric field carries only the low 64 bits and may lose precision. For the two solver routes, the API takes the solver's own `techniques_bitmask` when present and otherwise falls back to `BigInt(techniques)`: for an older solver deployment that can lack low bits, but it never invents any.
 
-**Requests.** Bitmask inputs accept a JSON number up to 2^53 − 1 or a decimal string of at most 19 digits, parsed with `BigInt`. Anything above 2^53 must be a string: a JSON number that large has already lost its low bits, so it is rejected with "Bitmasks above 2^53 must be sent as a decimal string". The one exception is `gameStartSchema` (`POST /play/start`), which still accepts such numbers so old app builds can start games (the stored value is never read). This covers `techniques` in `boardCreateSchema` / `boardUpdateSchema` / `dailyCreateSchema` / `dailyUpdateSchema` / `gameStartSchema`, `techniques_bitfield` in the example schemas (which must be at least 1), and the `/boards` query params `techniques` and `technique_bit`. Negative, fractional, exponent, hex, empty-string, over-long (> 19 digits, rejected before parsing) or out-of-range (> 2^63 − 1) values are rejected. Bodies fail with the usual zod-validator 400. The `/boards` query params fail with 400 `errorResponse("Invalid techniques: …")`. A body `null` still means 0.
+**Requests.** Bitmask inputs accept a JSON number up to 2^53 − 1 or a decimal string of at most 39 digits, parsed with `BigInt`. Anything above 2^53 must be a string: a JSON number that large has already lost its low bits, so it is rejected with "Bitmasks above 2^53 must be sent as a decimal string". The one exception is `gameStartSchema` (`POST /play/start`), which still accepts such numbers so old app builds can start games. This covers `techniques` in `boardCreateSchema` / `boardUpdateSchema` / `dailyCreateSchema` / `dailyUpdateSchema` / `gameStartSchema`, `techniques_bitfield` in the example schemas (which must be at least 1), and the `/boards` query params `techniques` and `technique_bit`. Negative, fractional, exponent, hex, empty-string, over-long (> 39 digits, rejected before parsing) or out-of-range (> 2^128 − 1) values are rejected. Bodies fail with the usual zod-validator 400. The `/boards` query params fail with 400 `errorResponse("Invalid techniques: …")`. A body `null` still means 0.
 
-**SQL.** Bitmask filters bind their value as a decimal string cast to bigint (`$n::bigint`, via `bitmaskParam()` in `src/lib/bitmask.ts`), never as a JS number.
+**SQL.** Bitmask filters bind their value as a 128-character binary string cast to `bit(128)` (`$n::bit(128)`, via `bitmaskParam()` in `src/lib/bitmask.ts`), never as a JS number.
 
 ## Puzzles
 

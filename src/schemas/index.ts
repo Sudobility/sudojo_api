@@ -3,10 +3,10 @@ import { parseBitmask } from "../lib/bitmask";
 
 /**
  * A technique bitmask in a request body: a non-negative integer as a JSON
- * number or a decimal string (at most 19 digits), parsed to a bigint. Values
- * above 2^53 (any technique id >= 54) must be sent as a string: a JSON number
- * that large has already lost its low bits, so it is rejected. `null` means 0,
- * as it did when these fields were `z.coerce.number()`.
+ * number or a decimal string (up to the 128-bit bitmask max), parsed to a
+ * bigint. Values above 2^53 (any technique id >= 54) must be sent as a string:
+ * a JSON number that large has already lost its low bits, so it is rejected.
+ * `null` means 0, as it did when these fields were `z.coerce.number()`.
  */
 function bitmaskSchema(options: { allowUnsafeNumber?: boolean } = {}) {
   return z.union([z.number(), z.string(), z.null()]).transform((value, ctx) => {

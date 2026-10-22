@@ -71,13 +71,15 @@ examplesRouter.get("/", async c => {
     ) {
       return c.json(errorResponse("Invalid technique ID"), 400);
     }
-    // Exact bigint bit, bound as a bigint string. techniqueToBit() returns a
-    // JS number, which postgres.js would send rounded for ids >= 54.
+    // Exact single-technique bit, bound as a bit(128) literal (see
+    // bitmaskParam). `bit & bit` is a bit, so test for a hit with `<> 0`.
     const bit = bitmaskParam(techniqueBit(techniqueId));
     rows = await db
       .select()
       .from(techniqueExamples)
-      .where(sql`(${techniqueExamples.techniques_bitfield} & ${bit}) != 0`)
+      .where(
+        sql`(${techniqueExamples.techniques_bitfield} & ${bit}) <> ${bitmaskParam(0n)}`
+      )
       .orderBy(desc(techniqueExamples.created_at));
   } else {
     rows = await db

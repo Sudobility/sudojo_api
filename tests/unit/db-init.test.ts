@@ -122,18 +122,37 @@ describe("database setup SQL", () => {
     expect(mismatches).toEqual([]);
   });
 
-  it("maps technique bitmask columns to JS bigint, other bigints to number", () => {
+  it("maps technique bitmask columns to the bit(128) custom type, other bigints to number", () => {
     const columnType = (table: PgTable, name: string) =>
       getTableConfig(table).columns.find(c => c.name === name)?.columnType;
-    // mode: "bigint" -- lossless above 2^53.
-    expect(columnType(schema.boards, "techniques")).toBe("PgBigInt64");
-    expect(columnType(schema.dailies, "techniques")).toBe("PgBigInt64");
-    expect(columnType(schema.techniqueExamples, "techniques_bitfield")).toBe(
-      "PgBigInt64"
-    );
-    expect(columnType(schema.gameSessions, "techniques")).toBe("PgBigInt64");
+    const sqlType = (table: PgTable, name: string) =>
+      getTableConfig(table).columns.find(c => c.name === name)?.getSQLType();
+    // The techniqueBitmask custom type: bit(128), carried as a JS bigint.
+    for (const [table, name] of [
+      [schema.boards, "techniques"],
+      [schema.dailies, "techniques"],
+      [schema.techniqueExamples, "techniques_bitfield"],
+      [schema.gameSessions, "techniques"],
+    ] as const) {
+      expect(columnType(table, name)).toBe("PgCustomColumn");
+      expect(sqlType(table, name)).toBe("bit(128)");
+    }
     // Not a bitmask; stays mode: "number".
     expect(columnType(schema.userStats, "total_points")).toBe("PgBigInt53");
+  });
+
+  it("creates technique bitmask columns as bit(128) in raw SQL", async () => {
+    const statements = await runSetup();
+    for (const [table, column] of bitfieldColumns) {
+      const created = statements.find(s =>
+        s.startsWith(`CREATE TABLE IF NOT EXISTS ${table} (`)
+      );
+      expect(created).toContain(`${column} bit(128)`);
+    }
+    const gs = statements.find(s =>
+      s.startsWith("CREATE TABLE IF NOT EXISTS game_sessions (")
+    );
+    expect(gs).toContain("techniques bit(128)");
   });
 
   it("widens INTEGER technique bitfields left by the old setup", async () => {
@@ -148,11 +167,12 @@ describe("database setup SQL", () => {
     }
   });
 
-  it("does not alter technique bitfields that are already BIGINT", async () => {
+  it("does not re-widen technique bitfields that are already BIGINT", async () => {
     for (const [table, column] of bitfieldColumns) {
       fake.columnTypes.set(`${table}.${column}`, "bigint");
     }
     const statements = await runSetup();
+    // The int->bigint widen is skipped; the bigint->bit(128) convert runs.
     expect(statements.filter(s => /TYPE BIGINT/.test(s))).toEqual([]);
     // The guard still has to look before deciding.
     for (const [table, column] of bitfieldColumns) {
@@ -165,6 +185,29 @@ describe("database setup SQL", () => {
         )
       ).toBe(true);
     }
+  });
+
+  it("converts BIGINT technique bitfields to bit(128)", async () => {
+    for (const [table, column] of bitfieldColumns) {
+      fake.columnTypes.set(`${table}.${column}`, "bigint");
+    }
+    const statements = await runSetup();
+    for (const [table, column] of bitfieldColumns) {
+      expect(statements).toContain(
+        `ALTER TABLE "${table}" ALTER COLUMN "${column}" TYPE bit(128) USING (repeat('0', 64)::bit(64) || "${column}"::bit(64))`
+      );
+      // The old bigint DEFAULT can't auto-cast, so it is dropped first.
+      expect(statements).toContain(
+        `ALTER TABLE "${table}" ALTER COLUMN "${column}" DROP DEFAULT`
+      );
+    }
+    // boards/dailies regain a bit default; the NOT NULL bitfield stays default-less.
+    expect(statements).toContain(
+      `ALTER TABLE "boards" ALTER COLUMN "techniques" SET DEFAULT (repeat('0', 128))::bit(128)`
+    );
+    expect(statements).not.toContain(
+      `ALTER TABLE "technique_examples" ALTER COLUMN "techniques_bitfield" SET DEFAULT (repeat('0', 128))::bit(128)`
+    );
   });
 
   it("widens the bitfields after their tables exist", async () => {

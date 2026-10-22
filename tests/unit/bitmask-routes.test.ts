@@ -66,6 +66,9 @@ app.onError(err => {
 const HIGH = (1n << 60n) | (1n << 1n);
 const HIGH_STRING = "1152921504606846978";
 const HIGH_NUMBER = Number(HIGH); // what old clients have always received
+/** The bit(128) wire form postgres.js returns / Drizzle binds for the mask. */
+const HIGH_BITS = HIGH.toString(2).padStart(128, "0");
+const ZERO_BITS = "0".repeat(128);
 
 const BOARD_UUID = "11111111-1111-4111-8111-111111111111";
 const DAILY_UUID = "22222222-2222-4222-8222-222222222222";
@@ -81,7 +84,7 @@ function seedAll() {
       symmetrical: false,
       board: PUZZLE,
       solution: SOLUTION,
-      techniques: HIGH_STRING,
+      techniques: HIGH_BITS,
       difficulty_score: 7,
       created_at: null,
       updated_at: null,
@@ -93,7 +96,7 @@ function seedAll() {
       date: "2026-09-10",
       board_uuid: BOARD_UUID,
       level: 4,
-      techniques: HIGH_STRING,
+      techniques: HIGH_BITS,
       difficulty_score: 7,
       board: PUZZLE,
       solution: SOLUTION,
@@ -107,7 +110,7 @@ function seedAll() {
       board: PUZZLE,
       pencilmarks: null,
       solution: SOLUTION,
-      techniques_bitfield: HIGH_STRING,
+      techniques_bitfield: HIGH_BITS,
       primary_technique: 60,
       hint_data: null,
       source_board_uuid: BOARD_UUID,
@@ -272,8 +275,10 @@ describe("round trip of bit 60 + bit 1", () => {
     expect(status).toBe(201);
 
     const insert = pg.executed.find(e => /^insert into "boards"/.test(e.query));
-    expect(insert?.params).toContainEqual(HIGH);
-    expect(pg.tables.get("boards")?.[0]?.techniques).toBe(HIGH_STRING);
+    // Bound through the bit(128) custom type: the bigint becomes its 128-char
+    // binary wire form, which is what the column stores.
+    expect(insert?.params).toContainEqual(HIGH_BITS);
+    expect(pg.tables.get("boards")?.[0]?.techniques).toBe(HIGH_BITS);
 
     expect(body.data.techniques_bitmask).toBe(HIGH_STRING);
     expect(body.data.techniques).toBe(HIGH_NUMBER);
@@ -321,7 +326,7 @@ describe("round trip of bit 60 + bit 1", () => {
     expect(body.data.techniques_bitfield).toBe(HIGH_NUMBER);
   });
 
-  it("POST /play/start stores the exact bigint", async () => {
+  it("POST /play/start stores the exact mask as bit(128)", async () => {
     const { status } = await call(
       "/play/start",
       json("POST", {
@@ -336,8 +341,8 @@ describe("round trip of bit 60 + bit 1", () => {
     const insert = pg.executed.find(e =>
       /^insert into "game_sessions"/.test(e.query)
     );
-    expect(insert?.params).toContainEqual(HIGH);
-    expect(pg.tables.get("game_sessions")?.[0]?.techniques).toBe(HIGH_STRING);
+    expect(insert?.params).toContainEqual(HIGH_BITS);
+    expect(pg.tables.get("game_sessions")?.[0]?.techniques).toBe(HIGH_BITS);
   });
 });
 

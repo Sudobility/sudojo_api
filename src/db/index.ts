@@ -79,6 +79,38 @@ async function widenColumnToBigint(
 }
 
 /**
+ * Idempotent migration: convert a technique-bitmask column from BIGINT to
+ * bit(128) so technique ids can exceed 62 (a signed BIGINT caps the usable
+ * mask at 2^63-1). Runs only while the column is still BIGINT, so it is a
+ * no-op once converted (and on a fresh DB where CREATE already made it bit).
+ *
+ * The three steps are required in order: the existing `DEFAULT 0` (a bigint)
+ * cannot be auto-cast to bit during ALTER TYPE, so it is dropped first and a
+ * bit default restored after. The USING clause zero-extends the signed 64-bit
+ * value on the left (`zeros(64) || value::bit(64)`), which matches the
+ * MSB-first, id-N-at-position-(127-N) convention in src/lib/bitmask.ts. All
+ * current values are non-negative and < 2^63, so the top bits are zero and the
+ * reinterpretation is exact. Verified empirically against Postgres.
+ */
+async function convertColumnToBit128(
+  client: ReturnType<typeof postgres>,
+  table: string,
+  column: string,
+  options: { setDefault: boolean }
+) {
+  const [info] = await client<{ data_type: string }[]>`
+    SELECT data_type FROM information_schema.columns
+    WHERE table_schema = current_schema() AND table_name = ${table} AND column_name = ${column}
+  `;
+  if (info?.data_type !== "bigint") return;
+  await client`ALTER TABLE ${client(table)} ALTER COLUMN ${client(column)} DROP DEFAULT`;
+  await client`ALTER TABLE ${client(table)} ALTER COLUMN ${client(column)} TYPE bit(128) USING (repeat('0', 64)::bit(64) || ${client(column)}::bit(64))`;
+  if (options.setDefault) {
+    await client`ALTER TABLE ${client(table)} ALTER COLUMN ${client(column)} SET DEFAULT (repeat('0', 128))::bit(128)`;
+  }
+}
+
+/**
  * Initialize core database tables using raw SQL.
  *
  * Creates tables in dependency order:
@@ -256,7 +288,7 @@ export async function initDatabase() {
       symmetrical BOOLEAN DEFAULT false,
       board VARCHAR(81) NOT NULL,
       solution VARCHAR(81) NOT NULL,
-      techniques BIGINT DEFAULT 0,
+      techniques bit(128) DEFAULT (repeat('0', 128))::bit(128),
       created_at TIMESTAMP DEFAULT NOW(),
       updated_at TIMESTAMP DEFAULT NOW()
     )
@@ -268,7 +300,7 @@ export async function initDatabase() {
       date DATE UNIQUE NOT NULL,
       board_uuid UUID REFERENCES boards(uuid) ON DELETE SET NULL,
       level INTEGER REFERENCES levels(level) ON DELETE SET NULL,
-      techniques BIGINT DEFAULT 0,
+      techniques bit(128) DEFAULT (repeat('0', 128))::bit(128),
       board VARCHAR(81) NOT NULL,
       solution VARCHAR(81) NOT NULL,
       created_at TIMESTAMP DEFAULT NOW(),
@@ -317,7 +349,7 @@ export async function initDatabase() {
       board VARCHAR(81) NOT NULL,
       pencilmarks TEXT,
       solution VARCHAR(81) NOT NULL,
-      techniques_bitfield BIGINT NOT NULL,
+      techniques_bitfield bit(128) NOT NULL,
       primary_technique INTEGER NOT NULL,
       hint_data TEXT,
       source_board_uuid UUID REFERENCES boards(uuid) ON DELETE SET NULL,
@@ -337,6 +369,25 @@ export async function initDatabase() {
     client,
     "technique_examples",
     "techniques_bitfield"
+  );
+
+  // Migration: widen technique bitmasks from BIGINT to bit(128) so technique
+  // ids can exceed 62. Chains after the int->bigint widen above; no-op once a
+  // column is already bit(128). technique_examples.techniques_bitfield is NOT
+  // NULL with no default, so it keeps no default.
+  await convertColumnToBit128(client, "boards", "techniques", {
+    setDefault: true,
+  });
+  await convertColumnToBit128(client, "dailies", "techniques", {
+    setDefault: true,
+  });
+  await convertColumnToBit128(
+    client,
+    "technique_examples",
+    "techniques_bitfield",
+    {
+      setDefault: false,
+    }
   );
 
   await client`
@@ -459,7 +510,7 @@ export async function initGamificationTables() {
       board VARCHAR(81) NOT NULL,
       solution VARCHAR(81) NOT NULL,
       level INTEGER NOT NULL,
-      techniques BIGINT DEFAULT 0,
+      techniques bit(128) DEFAULT (repeat('0', 128))::bit(128),
       hint_used BOOLEAN NOT NULL DEFAULT FALSE,
       hints_count INTEGER NOT NULL DEFAULT 0,
       hint_points_earned INTEGER NOT NULL DEFAULT 0,
@@ -471,6 +522,12 @@ export async function initGamificationTables() {
 
   // Migration: add difficulty_score snapshot to active game sessions
   await client`ALTER TABLE game_sessions ADD COLUMN IF NOT EXISTS difficulty_score INTEGER NOT NULL DEFAULT 0`;
+
+  // Migration: widen game_sessions.techniques from BIGINT to bit(128) (see
+  // convertColumnToBit128). No-op once converted / on a fresh bit(128) create.
+  await convertColumnToBit128(client, "game_sessions", "techniques", {
+    setDefault: true,
+  });
 
   // Point transactions table (audit trail)
   await client`

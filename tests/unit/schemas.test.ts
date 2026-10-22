@@ -1007,7 +1007,7 @@ describe("bitmask fields", () => {
       "0x10",
       "",
       "abc",
-      (2n ** 63n).toString(),
+      (2n ** 128n).toString(),
       true,
     ])("rejects %s", value => {
       expect(parse(value).success).toBe(false);

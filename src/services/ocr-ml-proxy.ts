@@ -8,10 +8,19 @@
  * caller falls back to the Tesseract pipeline in @sudobility/sudojo_ocr. That
  * keeps image scanning working during a model rollout or an outage of the
  * inference box.
+ *
+ * Before the call we crop to the board square with @sudobility/sudojo_ocr's
+ * board detector. Library images are often whole-app screenshots where a digit
+ * button pad sits right below the grid; the pad is a grid-like decoy that the
+ * model's own detector mistakes for the board. Handing the model a tight square
+ * crop removes the decoy, and a crop that already fills the frame is exactly
+ * what the model's whole-image detection path expects.
  */
 
 import { getEnv } from "../lib/env-helper";
+import { detectAndCropBoard } from "@sudobility/sudojo_ocr";
 import type { OCRExtractData } from "@sudobility/sudojo_types";
+import { getNodeAdapter } from "./ocr-canvas";
 
 const OCR_ML_URL = getEnv("OCR_ML_URL", "")!;
 const OCR_ML_TIMEOUT_MS = parseInt(getEnv("OCR_ML_TIMEOUT_MS", "20000")!, 10);
@@ -38,6 +47,30 @@ export function isOCRMLEnabled(): boolean {
 }
 
 /**
+ * Crop the image to the detected board square, returned as a data URL.
+ *
+ * Falls back to the original image if detection throws, so a cropping failure
+ * never blocks a scan — the ML service still runs its own board detection on
+ * whatever it receives.
+ *
+ * @param image Base64 image data (with or without a data URL prefix)
+ */
+async function cropToBoard(image: string): Promise<string> {
+  try {
+    const base64 = image.includes(",") ? image.split(",")[1] || image : image;
+    const imageBuffer = Buffer.from(base64, "base64");
+    const adapter = await getNodeAdapter();
+    return await detectAndCropBoard(adapter, imageBuffer);
+  } catch (err) {
+    console.warn(
+      "[OCR] ML board pre-crop failed, sending original image:",
+      err
+    );
+    return image;
+  }
+}
+
+/**
  * Extract a puzzle via the ML service.
  *
  * @param image Base64 image data (with or without a data URL prefix)
@@ -54,6 +87,11 @@ export async function extractViaML(
 
   const url = `${OCR_ML_URL}/v1/ocr`;
   const startedAt = Date.now();
+
+  // Isolate the board square before recognition so a whole-app screenshot's
+  // digit-button pad can't be mistaken for the grid.
+  const cropped = await cropToBoard(image);
+
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), OCR_ML_TIMEOUT_MS);
 
@@ -61,7 +99,7 @@ export async function extractViaML(
     const response = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ image, min_clues: minClues }),
+      body: JSON.stringify({ image: cropped, min_clues: minClues }),
       signal: controller.signal,
     });
     clearTimeout(timeoutId);

@@ -28,6 +28,11 @@ const { default: examplesRouter } = await import("../../src/routes/examples");
 /** Bit 60 (Grouped X-Cycles) + bit 1 (Full House). */
 const HIGH_STRING = "1152921504606846978";
 
+/** A technique bitmask as the 128-char MSB-first binary string bound into SQL. */
+const b = (value: bigint) => value.toString(2).padStart(128, "0");
+/** The bit(128) zero literal every bitwise predicate compares against. */
+const Z = "0".repeat(128);
+
 /** Run a GET and return the WHERE clause and params of its one query. */
 async function runQuery(router: typeof boardsRouter, search: string) {
   pg.executed.length = 0;
@@ -60,17 +65,19 @@ describe("GET /boards filters", () => {
   it("ANDs level and technique_bit", async () => {
     const { where, params } = await listBoards("?level=3&technique_bit=4");
     expect(where).toContain('"boards"."level" = $1');
-    expect(where).toContain('("boards"."techniques" & $2::bigint) != 0');
+    expect(where).toContain(
+      '("boards"."techniques" & $2::bit(128)) <> $3::bit(128)'
+    );
     expect(where).toMatch(/ and /);
-    expect(params).toEqual([3, "4"]);
+    expect(params).toEqual([3, b(4n), Z]);
   });
 
   it("ANDs level and an exact techniques value", async () => {
     const { where, params } = await listBoards("?level=5&techniques=12");
     expect(where).toContain('"boards"."level" = $1');
-    expect(where).toContain('"boards"."techniques" = $2::bigint');
+    expect(where).toContain('"boards"."techniques" = $2::bit(128)');
     expect(where).toMatch(/ and /);
-    expect(params).toEqual([5, "12"]);
+    expect(params).toEqual([5, b(12n)]);
   });
 
   it("keeps techniques=0 (0 or NULL) grouped when combined", async () => {
@@ -79,9 +86,9 @@ describe("GET /boards filters", () => {
     // Without the parentheses, `level = 3 and techniques = 0 OR techniques IS
     // NULL` would return every NULL-techniques board regardless of level.
     expect(where).toContain(
-      '("boards"."techniques" = 0 OR "boards"."techniques" IS NULL)'
+      '("boards"."techniques" = $2::bit(128) OR "boards"."techniques" IS NULL)'
     );
-    expect(params).toEqual([3]);
+    expect(params).toEqual([3, Z]);
   });
 
   it("ANDs all three filters", async () => {
@@ -89,24 +96,28 @@ describe("GET /boards filters", () => {
       "?level=7&technique_bit=8&techniques=24"
     );
     expect(where).toContain('"boards"."level" = $1');
-    expect(where).toContain('("boards"."techniques" & $2::bigint) != 0');
-    expect(where).toContain('"boards"."techniques" = $3::bigint');
+    expect(where).toContain(
+      '("boards"."techniques" & $2::bit(128)) <> $3::bit(128)'
+    );
+    expect(where).toContain('"boards"."techniques" = $4::bit(128)');
     expect(where?.match(/ and /g)).toHaveLength(2);
-    expect(params).toEqual([7, "8", "24"]);
+    expect(params).toEqual([7, b(8n), Z, b(24n)]);
   });
 
-  it("binds bitmasks above 2^53 exactly, as decimal strings", async () => {
+  it("binds bitmasks above 2^53 exactly, as 128-bit binary strings", async () => {
     const { params } = await listBoards(
       `?technique_bit=1152921504606846976&techniques=${HIGH_STRING}`
     );
-    // A JS number would have been sent as "1152921504606847000".
-    expect(params).toEqual(["1152921504606846976", HIGH_STRING]);
+    // Bound as exact bit(128) literals; a JS number would have rounded bit 60.
+    expect(params).toEqual([b(1n << 60n), Z, b(BigInt(HIGH_STRING))]);
   });
 
   it("ignores an unparseable level but keeps valid filters", async () => {
     const { where, params } = await listBoards("?level=abc&technique_bit=4");
-    expect(where).toBe('("boards"."techniques" & $1::bigint) != 0');
-    expect(params).toEqual(["4"]);
+    expect(where).toBe(
+      '("boards"."techniques" & $1::bit(128)) <> $2::bit(128)'
+    );
+    expect(params).toEqual([b(4n), Z]);
   });
 
   it.each([
@@ -147,10 +158,10 @@ describe("GET /examples?has_technique", () => {
       "?has_technique=60"
     );
     expect(where).toBe(
-      '("technique_examples"."techniques_bitfield" & $1::bigint) != 0'
+      '("technique_examples"."techniques_bitfield" & $1::bit(128)) <> $2::bit(128)'
     );
-    // techniqueToBit(60) is a JS number, which postgres.js would have sent
-    // as "1152921504606847000" -- not bit 60.
-    expect(params).toEqual(["1152921504606846976"]);
+    // Bound as an exact bit(128) literal (bit 60 set); a JS number would have
+    // rounded it to "1152921504606847000".
+    expect(params).toEqual([b(1n << 60n), Z]);
   });
 });
