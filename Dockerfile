@@ -7,8 +7,9 @@ WORKDIR /app
 COPY package.json bun.lock ./
 
 # Install dependencies (including devDependencies for build)
-ARG NPM_TOKEN
-RUN echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > ~/.npmrc && \
+ARG GH_PACKAGES_TOKEN
+RUN echo "@sudobility:registry=https://npm.pkg.github.com" > ~/.npmrc && \
+    echo "//npm.pkg.github.com/:_authToken=${GH_PACKAGES_TOKEN}" >> ~/.npmrc && \
     bun install --frozen-lockfile && \
     rm ~/.npmrc
 
@@ -32,8 +33,9 @@ WORKDIR /app
 COPY package.json bun.lock ./
 
 # Install production dependencies only
-ARG NPM_TOKEN
-RUN echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > ~/.npmrc && \
+ARG GH_PACKAGES_TOKEN
+RUN echo "@sudobility:registry=https://npm.pkg.github.com" > ~/.npmrc && \
+    echo "//npm.pkg.github.com/:_authToken=${GH_PACKAGES_TOKEN}" >> ~/.npmrc && \
     bun install --frozen-lockfile --production && \
     rm ~/.npmrc
 
