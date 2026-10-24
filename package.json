@@ -1,6 +1,6 @@
 {
   "name": "sudojo_api",
-  "version": "1.0.177",
+  "version": "1.0.178",
   "module": "src/index.ts",
   "type": "module",
   "private": true,
