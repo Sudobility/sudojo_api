@@ -43,8 +43,8 @@ export const MIN_LEVEL = 1;
 /** Highest display level. */
 export const MAX_LEVEL = 12;
 
-/** Number of real techniques: ids 1..60, matching the solver's FULL_HOUSE..GROUPED_X_CYCLES. */
-export const MAX_TECHNIQUE_ID = 60;
+/** Highest known technique ID; ALC (61) is currently opt-in at the solver. */
+export const MAX_TECHNIQUE_ID = 61;
 
 export interface TechniqueLevel {
   /** Solver difficulty score; the solve order is ascending in this value. */
@@ -94,6 +94,7 @@ export const TECHNIQUE_LEVELS: Readonly<Record<number, TechniqueLevel>> =
     20: { score: 45, level: 9, name: "WXYZ-Wing" },
     29: { score: 50, level: 9, name: "Remote Pairs" },
     57: { score: 55, level: 9, name: "Franken X-Wing" },
+    61: { score: 55, level: 9, name: "Almost Locked Candidates" },
     9: { score: 60, level: 9, name: "Hidden Quad" },
     42: { score: 60, level: 9, name: "X-Chain" },
     17: { score: 65, level: 9, name: "Finned Swordfish" },

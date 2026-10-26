@@ -153,7 +153,7 @@ describe("levelForTechnique", () => {
     // Technique 0 is "no technique" (an auto-pencilmark hint step): it must not
     // silently become level 1, which would award hint points for it.
     expect(levelForTechnique(0)).toBeNull();
-    expect(levelForTechnique(61)).toBeNull();
+    expect(levelForTechnique(62)).toBeNull();
     expect(levelForTechnique(-1)).toBeNull();
   });
 
@@ -198,6 +198,7 @@ describe("levelForBitmask", () => {
 
   it("ignores bits that are not real technique ids", () => {
     // A newer solver setting an unknown bit must not inflate the level.
-    expect(levelForBitmask(bit(3) | bit(61) | bit(62))).toBe(2);
+    expect(levelForBitmask(bit(3) | bit(62) | bit(63))).toBe(2);
+    expect(levelForBitmask(bit(3) | bit(61))).toBe(9);
   });
 });
