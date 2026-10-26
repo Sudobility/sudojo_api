@@ -43,8 +43,8 @@ export const MIN_LEVEL = 1;
 /** Highest display level. */
 export const MAX_LEVEL = 12;
 
-/** Highest known technique ID; IDs 61-62 are currently opt-in at the solver. */
-export const MAX_TECHNIQUE_ID = 62;
+/** Highest known technique ID; IDs 61-63 are currently opt-in at the solver. */
+export const MAX_TECHNIQUE_ID = 63;
 
 export interface TechniqueLevel {
   /** Solver difficulty score; the solve order is ascending in this value. */
@@ -114,6 +114,7 @@ export const TECHNIQUE_LEVELS: Readonly<Record<number, TechniqueLevel>> =
     53: { score: 125, level: 11, name: "Sashimi Jellyfish" },
     16: { score: 140, level: 11, name: "Squirmbag" },
     46: { score: 140, level: 11, name: "TUVWXYZ-Wing" },
+    63: { score: 160, level: 11, name: "Bivalue Oddagon" },
     48: { score: 180, level: 12, name: "Alternating Inference Chain (AIC)" },
     47: { score: 190, level: 12, name: "STUVWXYZ-Wing" },
     22: { score: 200, level: 12, name: "Finned Squirmbag" },
