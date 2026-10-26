@@ -43,8 +43,8 @@ export const MIN_LEVEL = 1;
 /** Highest display level. */
 export const MAX_LEVEL = 12;
 
-/** Highest known technique ID; ALC (61) is currently opt-in at the solver. */
-export const MAX_TECHNIQUE_ID = 61;
+/** Highest known technique ID; IDs 61-62 are currently opt-in at the solver. */
+export const MAX_TECHNIQUE_ID = 62;
 
 export interface TechniqueLevel {
   /** Solver difficulty score; the solve order is ascending in this value. */
@@ -100,6 +100,7 @@ export const TECHNIQUE_LEVELS: Readonly<Record<number, TechniqueLevel>> =
     17: { score: 65, level: 9, name: "Finned Swordfish" },
     44: { score: 70, level: 9, name: "VWXYZ-Wing" },
     52: { score: 70, level: 9, name: "Sashimi Swordfish" },
+    62: { score: 70, level: 9, name: "Triple Firework" },
     43: { score: 75, level: 10, name: "XY-Chain" },
     13: { score: 80, level: 11, name: "Jellyfish" },
     35: { score: 80, level: 11, name: "X-Cycles" },
