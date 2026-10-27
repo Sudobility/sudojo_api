@@ -67,9 +67,9 @@ export const levelParamSchema = z.object({
 });
 
 // Technique schemas
-// Max technique ID is 63 (opt-in ALC, Triple Firework, and Bivalue Oddagon)
+// Max technique ID is 64 (opt-in research IDs 61-64)
 export const techniqueCreateSchema = z.object({
-  technique: z.number().int().min(1).max(63),
+  technique: z.number().int().min(1).max(64),
   level: z.number().int().min(1).max(12),
   title: z.string().min(1).max(255),
   text: z.string().nullish().default(""),
@@ -87,7 +87,7 @@ export const techniqueUpdateSchema = z.object({
 });
 
 export const techniqueParamSchema = z.object({
-  technique: z.coerce.number().int().min(1).max(63),
+  technique: z.coerce.number().int().min(1).max(64),
 });
 
 export const techniquePathParamSchema = z.object({
@@ -96,7 +96,7 @@ export const techniquePathParamSchema = z.object({
 
 // Learning schemas
 export const learningCreateSchema = z.object({
-  technique: z.number().int().min(1).max(63),
+  technique: z.number().int().min(1).max(64),
   index: z.number().int(),
   language_code: z.string().min(2).max(10).nullish().default("en"),
   text: z.string().nullish().default(""),
@@ -104,7 +104,7 @@ export const learningCreateSchema = z.object({
 });
 
 export const learningUpdateSchema = z.object({
-  technique: z.number().int().min(1).max(63).optional(),
+  technique: z.number().int().min(1).max(64).optional(),
   index: z.number().int().optional(),
   language_code: z.string().min(2).max(10).nullish(),
   text: z.string().nullish(),
@@ -236,7 +236,7 @@ export const techniqueExampleCreateSchema = z.object({
   pencilmarks: z.string().nullish(),
   solution: z.string().length(81),
   techniques_bitfield: nonEmptyBitmask,
-  primary_technique: z.number().int().min(1).max(63),
+  primary_technique: z.number().int().min(1).max(64),
   hint_data: z.string().nullish(),
   source_board_uuid: z.string().uuid().nullish(),
 });
@@ -246,14 +246,14 @@ export const techniqueExampleUpdateSchema = z.object({
   pencilmarks: z.string().nullish(),
   solution: z.string().length(81).optional(),
   techniques_bitfield: nonEmptyBitmask.optional(),
-  primary_technique: z.number().int().min(1).max(63).optional(),
+  primary_technique: z.number().int().min(1).max(64).optional(),
   hint_data: z.string().nullish(),
   source_board_uuid: z.string().uuid().nullish(),
 });
 
 // Technique practice schemas
 export const techniquePracticeCreateSchema = z.object({
-  technique: z.number().int().min(1).max(63),
+  technique: z.number().int().min(1).max(64),
   board: z.string().length(81),
   pencilmarks: z.string().nullish(),
   solution: z.string().length(81),
