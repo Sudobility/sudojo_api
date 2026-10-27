@@ -198,7 +198,7 @@ describe("Schema Validation", () => {
 
     it("should reject invalid technique", () => {
       const result = techniqueCreateSchema.safeParse({
-        technique: 65,
+        technique: 66,
         level: 1,
         title: "Naked Single",
       });
@@ -236,8 +236,8 @@ describe("Schema Validation", () => {
       }
     });
 
-    it("should reject technique above 64", () => {
-      const result = techniqueParamSchema.safeParse({ technique: "65" });
+    it("should reject technique above 65", () => {
+      const result = techniqueParamSchema.safeParse({ technique: "66" });
       expect(result.success).toBe(false);
     });
   });
@@ -679,12 +679,12 @@ describe("Schema Validation", () => {
       expect(result.success).toBe(false);
     });
 
-    it("should reject primary_technique above 64", () => {
+    it("should reject primary_technique above 65", () => {
       const result = techniqueExampleCreateSchema.safeParse({
         board: validBoard,
         solution: validSolution,
         techniques_bitfield: 1,
-        primary_technique: 65,
+        primary_technique: 66,
       });
       expect(result.success).toBe(false);
     });
@@ -743,9 +743,9 @@ describe("Schema Validation", () => {
       expect(result.success).toBe(true);
     });
 
-    it("should reject technique above 64", () => {
+    it("should reject technique above 65", () => {
       const result = techniquePracticeCreateSchema.safeParse({
-        technique: 65,
+        technique: 66,
         board: validBoard,
         solution: validSolution,
       });

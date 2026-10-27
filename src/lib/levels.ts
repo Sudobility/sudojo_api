@@ -43,8 +43,8 @@ export const MIN_LEVEL = 1;
 /** Highest display level. */
 export const MAX_LEVEL = 12;
 
-/** Highest known technique ID; IDs 61-64 are currently opt-in at the solver. */
-export const MAX_TECHNIQUE_ID = 64;
+/** Highest known technique ID; IDs 61-65 are currently opt-in at the solver. */
+export const MAX_TECHNIQUE_ID = 65;
 
 export interface TechniqueLevel {
   /** Solver difficulty score; the solve order is ascending in this value. */
@@ -117,6 +117,7 @@ export const TECHNIQUE_LEVELS: Readonly<Record<number, TechniqueLevel>> =
     63: { score: 160, level: 11, name: "Bivalue Oddagon" },
     64: { score: 160, level: 11, name: "Distributed Disjoint Subset" },
     48: { score: 180, level: 12, name: "Alternating Inference Chain (AIC)" },
+    65: { score: 185, level: 12, name: "Grouped AIC" },
     47: { score: 190, level: 12, name: "STUVWXYZ-Wing" },
     22: { score: 200, level: 12, name: "Finned Squirmbag" },
     23: { score: 200, level: 12, name: "ALS Chain" },
