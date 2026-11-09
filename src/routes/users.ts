@@ -5,7 +5,10 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { eq } from "drizzle-orm";
-import { firebaseAuthMiddleware } from "../middleware/firebaseAuth";
+import {
+  firebaseAuthMiddleware,
+  firebaseAuthAllowAnonymousMiddleware,
+} from "../middleware/firebaseAuth";
 import { userIdParamSchema } from "../schemas";
 import { NONE_ENTITLEMENT, UserStatus } from "@sudobility/types";
 import { getSubscriptionHelper, getTestMode } from "../middleware/subscription";
@@ -13,6 +16,7 @@ import {
   getUserInfo,
   deleteUserAccount,
   getAppleSignInConfig,
+  isAnonymousUser,
 } from "../services/firebase";
 import { db, userStats } from "../db";
 import {
@@ -74,15 +78,32 @@ usersRouter.get(
 /**
  * GET /users/:userId/subscriptions
  *
- * Get user subscriptions (requires Firebase auth).
+ * Get user subscriptions. Requires a valid Firebase token. An anonymous
+ * (guest) caller is admitted ONLY when `?nativeIap=true`: on native-IAP
+ * platforms (App Store / Play Store / Mac App Store) a guest can hold a real
+ * subscription purchased against their anonymous app-user id, so they must be
+ * able to read it. On web billing (no `nativeIap`) a guest cannot subscribe
+ * and is still rejected. The uid check below restricts a caller to their own
+ * subscription, and a guest with no purchase simply gets an empty result.
  */
 usersRouter.get(
   "/:userId/subscriptions",
-  firebaseAuthMiddleware,
+  firebaseAuthAllowAnonymousMiddleware,
   zValidator("param", userIdParamSchema),
   async c => {
     const { userId } = c.req.valid("param");
     const firebaseUser = c.get("firebaseUser");
+
+    // Anonymous guests may only read a subscription on native-IAP platforms,
+    // where they can actually own one; elsewhere an anonymous caller is
+    // rejected (as on every other real-account route).
+    const nativeIap = c.req.query("nativeIap") === "true";
+    if (isAnonymousUser(firebaseUser) && !nativeIap) {
+      return c.json(
+        errorResponse("Anonymous users cannot access this resource"),
+        403
+      );
+    }
 
     // Ensure the authenticated user can only access their own subscription
     if (firebaseUser.uid !== userId) {
