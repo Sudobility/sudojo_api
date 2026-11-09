@@ -4,6 +4,14 @@ Backend API server for Sudojo, a Sudoku learning platform. Built with Hono on Bu
 
 ## Setup
 
+Requires [Bun](https://bun.sh) (1.4+). The `@sudobility/*` dependencies come from
+**GitHub Packages**, so before installing you need a GitHub token with `read:packages`
+in `~/.npmrc` (the repo `.npmrc` points the `@sudobility` scope at `npm.pkg.github.com`):
+
+```
+//npm.pkg.github.com/:_authToken=<YOUR_TOKEN>
+```
+
 ```bash
 bun install
 # Copy .env.example to .env; DATABASE_URL, FIREBASE_* and SOLVER_URL are required

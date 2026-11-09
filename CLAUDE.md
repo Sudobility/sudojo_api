@@ -1,15 +1,15 @@
 # CLAUDE.md
 
-> **Git policy — never auto-commit or auto-push.** Leave your work in the working tree.
-> Run `git commit`, `git push`, `gh pr create`, or `scripts/push_all.sh` **only when the user
-> explicitly asks in that turn**. Approval for an earlier change does not carry forward, and
-> finishing a task is not permission to commit it.
+> **Git policy — never auto-commit or auto-push.** Leave work in the working tree.
+> Run `git commit`, `git push`, `gh pr create`, or `scripts/push_all.sh` **only when the
+> user explicitly asks in that turn**. Finishing a task is not permission to commit it.
+> No feature branches — stay on the current branch.
 
-This file provides context for AI assistants working on this codebase.
+Context for AI assistants working on this codebase.
 
 ## Project Overview
 
-`sudojo_api` (private, `BUSL-1.1`; version in `package.json`) is the backend REST API for Sudojo, a Sudoku learning platform. It runs Hono on Bun and sits between the Sudojo clients and PostgreSQL, the C# solver service, the OCR ML service, Firebase Auth, and RevenueCat.
+`sudojo_api` (private, `BUSL-1.1`; version in `package.json`) is the backend REST API for Sudojo, a Sudoku learning platform. It runs **Hono on Bun** and sits between the Sudojo clients and PostgreSQL, the C# solver service, the OCR ML service, Firebase Auth, and RevenueCat.
 
 **Responsibilities:** content CRUD (levels 1–12, techniques 1–60, strategies, learning, communities), puzzles (boards, dailies with a fallback, challenges, technique examples/practices), solver proxy with hint point tracking, play sessions and gamification (points, badges, user level), user accounts (subscription lookup, soft delete), OCR, and optional AES-256-GCM encryption of `solution` fields.
 
@@ -17,39 +17,37 @@ Full route reference: **[docs/API.md](docs/API.md)**.
 
 ## Commands
 
-**This project uses Bun exclusively.** Do not use npm, yarn, or pnpm.
+**This project uses Bun exclusively.** Do not use npm, yarn, or pnpm. Installing `@sudobility/*` scoped deps requires auth to **GitHub Packages** (`.npmrc` → `npm.pkg.github.com`); CI/Docker write a `GH_PACKAGES_TOKEN` to `~/.npmrc` before `bun install`.
 
 ```bash
-bun install              # Install deps (CI/Docker write NPM_TOKEN to .npmrc first for @sudobility/*)
+bun install              # Install deps
 bun run dev              # bun --watch src/index.ts, port $PORT (default 3000)
 bun run start            # bun run src/index.ts
 bun run build            # bun build → dist/ (gitignored), target bun
 bun run build:compile    # standalone executable dist/server
 bun run typecheck        # tsc --noEmit
 bun run lint             # eslint src   (scripts/ and tests/ are ignored)
-bun run format           # prettier --write src
-bun run format:check     # prettier --check src
-bun run test             # Unit tests, vitest. Never touches a database; this is what CI runs.
-bun run test:db          # Database tests (*.db.test.ts), vitest. MANUAL -- never run in CI.
-                         # Requires TEST_DATABASE_URL pointing at localhost; refuses any other host.
+bun run format[:check]   # prettier write / check src
+bun run test             # Unit tests, vitest. Never touches a DB; this is what CI runs.
+bun run test:db          # DB tests (*.db.test.ts), vitest. MANUAL -- never run in CI.
+                         # Requires TEST_DATABASE_URL at exactly localhost; refuses any other host.
 bun run test:watch       # vitest watch (unit config)
 bun run db:init          # Create/migrate tables (also runs automatically at server start)
 bun run db:seed-badges   # Seed level_N / games_N badge definitions
-bun run --inspect src/index.ts   # Start with the debugger
 ```
 
-Verified on 2026-09-11 (Bun 1.3.10): `typecheck` (clean), `lint` (clean), `format:check` (clean), `test` (7 files, 294 tests pass), `bun build src/index.ts --target bun` (bundles). Not run: `dev`/`start` (long-running), `test:db`/`db:*` (need a database), `build:compile`.
+Verified clean 2026-11 (Bun 1.4.2): `typecheck`, `lint`, `format:check`, `test`. Not run: `dev`/`start` (long-running), `test:db`/`db:*` (need a database), `build:compile`.
 
-**Never run bare `bun test`.** That is Bun's own runner: it ignores `vitest.config.ts` and the setup files, so the localhost `TEST_DATABASE_URL` guard never runs, and Bun auto-loads `.env`, which holds a remote `DATABASE_URL`. The `*.db.test.ts` helpers delete table contents.
+**Never run bare `bun test`.** That is Bun's own runner: it ignores `vitest.config.ts` and the setup files, so the localhost `TEST_DATABASE_URL` guard never runs, and Bun auto-loads `.env`, which holds a **remote** `DATABASE_URL`. The `*.db.test.ts` helpers delete table contents.
 
 ## Architecture
 
 ```
-clients (sudojo_app, sudojo_app_rn, sudojo_extension, sudojo_bot via @sudobility/sudojo_client or raw fetch)
+clients (sudojo_app, _rn, _extension, _bot via @sudobility/sudojo_client or raw fetch)
    │  HTTPS  /api/v1/*   Authorization: Bearer <Firebase ID token>
    ▼
-src/index.ts  Hono app: logger → cors → GET / and /health → encryptSolutionsMiddleware(/api/v1/*) → routes
-   │            onError → 500 envelope, notFound → 404 envelope; exports { port, fetch, idleTimeout: 120 }
+src/index.ts  Hono app: logger → cors → GET / and /health → encryptSolutionsMiddleware(/api/v1/*)
+   │            → routes. onError → 500 envelope, notFound → 404; exports { port, fetch, idleTimeout: 120 }
    ▼
 src/routes/index.ts  mounts 15 routers (levels, techniques, strategies, learning, boards, dailies,
    │                  challenges, users, solver, examples, practices, play, gamification, ocr, communities)
@@ -66,204 +64,136 @@ services/firebase.ts     ── @sudobility/auth_service (firebase-admin), initi
 middleware/subscription.ts ── @sudobility/subscription_service (RevenueCat), lazily, only if REVENUECAT_API_KEY set
 ```
 
-Startup: `src/index.ts` calls `initDatabase()` then `initGamificationTables()`. On failure the process exits. Bun starts serving from the default export without waiting for the schema init to finish.
+Startup: `src/index.ts` calls `initDatabase()` then `initGamificationTables()`. On failure the process exits. Bun starts serving from the default export without waiting for schema init to finish.
 
 ## Repo Map
 
 ```
 src/
-├── index.ts               # Entry: middleware, health, error/404 handlers, DB init, SIGTERM/SIGINT shutdown
-├── routes/                # 15 Hono routers + index.ts registry (see docs/API.md)
-├── middleware/            # auth.ts, firebaseAuth.ts, optionalAuth.ts, subscription.ts, encryptSolutions.ts
-├── services/              # solver-proxy.ts, ocr-ml-proxy.ts, firebase.ts
+├── index.ts         # Entry: middleware, health, error/404 handlers, DB init, SIGTERM/SIGINT shutdown
+├── routes/          # 15 Hono routers + index.ts registry (see docs/API.md)
+├── middleware/      # auth, firebaseAuth, optionalAuth, subscription, encryptSolutions
+├── services/        # solver-proxy, ocr-ml-proxy, ocr-paddle, ocr-canvas, firebase
 ├── db/
-│   ├── index.ts           # Lazy client, `db` proxy/getDb(), initDatabase() + initGamificationTables() raw SQL
-│   ├── schema.ts          # Drizzle table definitions (must be kept in sync with the raw SQL by hand)
-│   ├── init.ts            # `bun run db:init`
-│   └── seed-badges.ts     # `bun run db:seed-badges`
-├── schemas/index.ts       # All Zod request schemas
-├── lib/                   # env-helper.ts, solution-crypto.ts, localization.ts (i18n string keys),
-│                          # bitmask.ts (technique bitmask parse / SQL bind / response fields + types)
-│                          # levels.ts (technique -> level 1-12: THE source of truth, see Difficulty Levels)
-└── scripts/               # One-off community seeders (seed-communities*.ts, update-community-icons.ts)
-scripts/                   # One-off data scripts, run with `bun run scripts/<name>.ts`; they write to DATABASE_URL
-                           # (import-*, seed-levels-techniques, populate-*, backfill-board-difficulty,
-                           #  export-technique-fixtures, reset-*, clear-examples-practices,
-                           #  verify-technique-levels, repairs/)
+│   ├── index.ts     # Lazy client, `db` proxy/getDb(), initDatabase() + initGamificationTables() raw SQL
+│   ├── schema.ts    # Drizzle table defs (kept in sync with the raw SQL BY HAND)
+│   ├── init.ts / seed-badges.ts   # db:init / db:seed-badges entry points
+├── schemas/index.ts # All Zod request schemas
+├── lib/             # env-helper, solution-crypto, localization (i18n keys), ocr-log,
+│                    #   bitmask.ts (bitmask parse/SQL bind/response + types),
+│                    #   levels.ts (technique→level 1-12: THE source of truth)
+└── scripts/         # community seeders
+scripts/             # One-off data scripts: `bun run scripts/<name>.ts`; they write to DATABASE_URL
+                     #   (import-*, seed-levels-techniques, populate-*, backfill-board-difficulty,
+                     #    verify-technique-levels, reset-*, repairs/, …)
 tests/
-├── unit/                  # env-helper, schemas, bitmask, db-init (setup SQL vs Drizzle schema),
-│                          # boards-route + bitmask-routes + solver-unrestricted (real routes over
-│                          # fake-postgres.ts, a stub postgres.js client behind a real Drizzle
-│                          # instance)  (bun run test)
-├── *.db.test.ts           # Route tests against a real DB via app.fetch (bun run test:db)
-├── setup.ts               # Unit setup: scrubDatabaseUrl() from @sudobility/test-db-guard
-├── setup.db.ts            # DB setup: loads .env.test, setupTestDatabase() guard, vi.mock firebase
-├── db-helpers.ts          # setupTestDatabase/cleanup/close, test tokens, getAuthHeaders
-└── fixtures/technique-practices.json   # Written by scripts/export-technique-fixtures.ts
-docs/API.md                # Route reference
-plans/IMPROVEMENTS.md      # Improvement backlog (partly stale)
-Dockerfile                 # oven/bun:1 build (tsc check) → oven/bun:1-slim runtime, EXPOSE 8010
+├── unit/            # env-helper, schemas, bitmask, db-init, boards/bitmask/solver routes over
+│                    #   fake-postgres.ts (stub postgres.js behind a real Drizzle instance)  (bun run test)
+├── *.db.test.ts     # Route tests against a real DB via app.fetch (bun run test:db)
+├── setup.ts         # Unit setup: scrubDatabaseUrl() from @sudobility/test-db-guard
+├── setup.db.ts      # DB setup: loads .env.test, setupTestDatabase() guard, vi.mock firebase
+└── db-helpers.ts    # setup/cleanup/close, test tokens, getAuthHeaders
+docs/API.md          # Route reference        Dockerfile  # oven/bun:1 → :1-slim, EXPOSE 8010
 .github/workflows/ci-cd.yml  # Calls johnqh/workflows unified-cicd.yml
 ```
 
 ## Environment Variables
 
-`getEnv()` (`src/lib/env-helper.ts`) reads `process.env` first, then a `.env.local` in the working directory, then the default. Bun auto-loads `.env` for `bun run`. Templates: `.env.example`, `.env.test.example`. Real `.env` and `.env.test` are gitignored and contain live credentials, so never print or copy them.
+`getEnv()` (`src/lib/env-helper.ts`) reads `process.env`, then a `.env.local`, then the default. Bun auto-loads `.env` for `bun run`. Templates: `.env.example`, `.env.test.example`; real `.env`/`.env.test` are gitignored live credentials — never print or copy them. Access env only via `getEnv`/`getRequiredEnv`, never `process.env` in `src/`.
 
-| Variable | Req. | Used by | Notes |
-|----------|------|---------|-------|
-| `DATABASE_URL` | yes | `db/index.ts`, scripts | Read lazily on first query |
-| `FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY` | yes | `services/firebase.ts` | Read at **import** time. Importing any route without them throws |
-| `SOLVER_URL` | yes | `services/solver-proxy.ts` | Read at import time, no default. Scripts default to `http://localhost:8080` |
-| `PORT` | no | `index.ts` | Default `3000` (the Dockerfile EXPOSEs 8010, so set `PORT=8010` in the container) |
-| `SOLVER_TIMEOUT_MS` | no | solver-proxy | Default `60000` |
-| `SITEADMIN_EMAILS` | no | auth_service | Comma-separated admin emails. `ADMIN_EMAILS` is a legacy fallback used only when this is unset |
-| `REVENUECAT_API_KEY` | no | subscription.ts | Read by `users.ts` only. Unset: `/users/:id/subscriptions` returns 500, and `DELETE /users/:id` skips the active-subscription check |
-| `ADMIN_API_KEY` | no | optionalAuth.ts | On `solver/solve`, a matching `X-API-Key` header or `?api_key=` skips token verification and the caller is treated as anonymous. It no longer unlocks anything, because hints are unrestricted. Kept so behaviour stays the same. `sudojo_app_rn/scripts/record_technique.sh` sends it |
-| `SOLUTION_ENCRYPTION_KEY` | no | solution-crypto.ts | 64 hex chars. Unset: solutions are sent in plaintext |
-| `OCR_ML_URL`, `OCR_ML_TIMEOUT_MS` | no | ocr-ml-proxy.ts | Unset URL: paddle only. Timeout default `20000` |
-| `PADDLE_OCR_URL`, `PADDLE_OCR_TIMEOUT_MS` | no | ocr-paddle.ts | Unset URL: camera scans 503, library scans use ML alone. Timeout default `30000` |
-| `APPLE_CLIENT_ID`, `APPLE_TEAM_ID`, `APPLE_KEY_ID`, `APPLE_PRIVATE_KEY` | no | firebase.ts | Apple token revocation on account delete. All four must be set |
-| `TEST_DATABASE_URL` | tests | tests/setup.db.ts | Must use host exactly `localhost` (not `127.0.0.1`) |
+| Variable | Req. | Notes |
+|----------|------|-------|
+| `DATABASE_URL` | yes | `db/index.ts`, scripts. Read lazily on first query |
+| `FIREBASE_PROJECT_ID` / `_CLIENT_EMAIL` / `_PRIVATE_KEY` | yes | `services/firebase.ts`, read at **import** time. Importing any route without them throws |
+| `SOLVER_URL` | yes | `solver-proxy.ts`, import time, no default. Scripts default to `http://localhost:8080` |
+| `PORT` | no | Default `3000` (Dockerfile EXPOSEs 8010, so set `PORT=8010` in the container) |
+| `SOLVER_TIMEOUT_MS` | no | Default `60000` |
+| `SITEADMIN_EMAILS` | no | Comma-separated admin emails. `ADMIN_EMAILS` is a legacy fallback only if unset |
+| `REVENUECAT_API_KEY` | no | Unset: `/users/:id/subscriptions` → 500, and `DELETE /users/:id` skips the active-sub check |
+| `ADMIN_API_KEY` | no | On `solver/solve`, matching `X-API-Key`/`?api_key=` skips token verify, caller treated as anonymous. Unlocks nothing (hints are unrestricted); kept for behaviour parity |
+| `SOLUTION_ENCRYPTION_KEY` | no | 64 hex chars. Unset: solutions sent in plaintext |
+| `OCR_ML_URL`, `OCR_ML_TIMEOUT_MS` | no | Unset URL: paddle only. Timeout default `20000` |
+| `PADDLE_OCR_URL`, `PADDLE_OCR_TIMEOUT_MS` | no | Unset URL: camera scans 503, library scans use ML alone. Default `30000` |
+| `APPLE_CLIENT_ID`/`_TEAM_ID`/`_KEY_ID`/`_PRIVATE_KEY` | no | Apple token revocation on account delete; all four needed |
+| `TEST_DATABASE_URL` | tests | Host must be exactly `localhost` (not `127.0.0.1`) |
 
-`SOLVER_API_KEY` appears in `.env.example` and `.env.test.example`, but no code reads it.
+`SOLVER_API_KEY` appears in the templates but no code reads it.
 
 ## Auth & Access Model
 
 | Layer | Where | Rule |
 |-------|-------|------|
 | Public | All content GETs, `solver/validate`, `solver/generate`, `ocr/extract`, `gamification/badges` | No auth |
-| Admin | Every POST/PUT/DELETE on content, plus `boards/update-stats`, `practices/regenerate-hints` | `adminMiddleware`: valid token and admin email |
-| User | `users/*` (own uid only), `play/*`, `gamification/stats|history` | `firebaseAuthMiddleware`, anonymous users → 403 |
-| Optional | `solver/solve` | `optionalAuthMiddleware`: no token is fine, a valid token sets `firebaseUser` (hint points), a bad token → 401 `AUTH_TOKEN_INVALID` |
+| Admin | Every POST/PUT/DELETE on content, plus `boards/update-stats`, `practices/regenerate-hints` | `adminMiddleware`: valid token + admin email |
+| User | `users/*` (own uid only), `play/*`, `gamification/stats\|history` | `firebaseAuthMiddleware`, anonymous → 403 |
+| Optional | `solver/solve` | `optionalAuthMiddleware`: no token OK, valid token sets `firebaseUser`, bad token → 401 `AUTH_TOKEN_INVALID` |
 
-**Hint limits are deliberately not enforced or computed by the server.** Every caller, anonymous or free, gets every hint level from `solver/solve`. This is the owner's decision. The route-level check was removed in 4e8de9b (March 2026), and the code that still computed tiers (`hintAccess.ts`, `maxHintLevel`, `HINT_LEVEL_LIMITS` usage) and the unused daily-limit gate (`accessControl.ts`, `services/access.ts`) were then deleted. Don't reintroduce them as a "fix". `tests/unit/solver-unrestricted.test.ts` pins this behaviour. Clients gate hints themselves using each level's `entitlement` (seeded `blue_belt,red_belt` for levels 8–10, `red_belt` for 11–12) and `offer_id`. `@sudobility/sudojo_types` still exports `HINT_LEVEL_LIMITS` and `HintAccessDenied*`, and client code (`sudojo_client`, `sudojo_lib`, both apps) still handles a 402 `HINT_ACCESS_DENIED` and a 402 "Daily limit reached". The API never sends either.
-
-## Gamification
-
-- `POST /play/start` stores one `game_sessions` row per user (replacing any older one).
-- A hint from `GET /solver/solve` whose `original` matches the active session awards `2 × hints.level` points right away and sets `hintUsed`.
-- `POST /play/finish` computes `2^level × 10 (no hints) × 2 (not interrupted)`. Interrupted means the client-reported `elapsedTime` is more than 1s below server time. Perfect play raises `userLevel` and awards `level_<n>`. Milestone badges `games_<5…10000>` exist. Every change writes a `point_transactions` row.
-
-## Database
-
-- Schema lives in **two places**: raw `CREATE TABLE IF NOT EXISTS` / `ALTER TABLE … ADD COLUMN IF NOT EXISTS` SQL in `src/db/index.ts` (what actually runs), and Drizzle definitions in `src/db/schema.ts` (types and queries). `drizzle-kit` is installed but has no config and no migrations. Migrations are forward-only.
-- Core tables: `levels`, `strategies` (17 seeded), `techniques`, `learning`, `boards`, `dailies`, `challenges`, `access_logs` (left over from the deleted daily-limit gate; still created, never written; `tests/db-helpers.ts` clears it), `technique_examples`, `technique_practices`, `communities`. Gamification tables: `user_stats` (includes `status` for soft delete), `badge_definitions`, `user_badges`, `game_sessions`, `point_transactions`.
-- `initDatabase()` also seeds data idempotently: strategy rows, technique → strategy mappings, and level `entitlement`/`offer_id`. When you add a column, put the `ALTER` **after** the table's `CREATE` (commit 743dbc3 fixed a fresh-DB bootstrap break caused by that ordering).
-- Technique bitmasks use bit `1n << BigInt(techniqueId)` (ids 1–60), so values exceed 2^53. `boards.techniques`, `dailies.techniques`, `technique_examples.techniques_bitfield` and `game_sessions.techniques` are `bigint({ mode: "bigint" })`: JS `bigint` in and out. `user_stats.total_points` is not a bitmask and stays `mode: "number"`. SQL counting uses `1::bigint << t`. See Conventions for the bitmask rules.
+**Hints are deliberately unrestricted.** Every caller (anonymous or free) gets every hint level from `solver/solve` — the owner's decision. The route check was removed in 4e8de9b (Mar 2026); the tier code (`hintAccess.ts`, `maxHintLevel`, `HINT_LEVEL_LIMITS` use) and the daily-limit gate (`accessControl.ts`, `services/access.ts`) were deleted. **Don't reintroduce them as a "fix".** `tests/unit/solver-unrestricted.test.ts` pins this. Clients gate hints themselves via each level's `entitlement` (`blue_belt,red_belt` for 8–10, `red_belt` for 11–12) and `offer_id`. `@sudobility/sudojo_types` still exports `HINT_LEVEL_LIMITS`/`HintAccessDenied*` and clients still handle a 402 `HINT_ACCESS_DENIED` / "Daily limit reached"; the API never sends either.
 
 ## Difficulty Levels
 
-**`src/lib/levels.ts` is the single source of truth for the 1-12 scale.** The API
-does **not** read `level` from the solver. `TECHNIQUE_LEVELS` maps each technique
-id 1-60 to a level (and mirrors the solver's `difficulty_score`), and everything
-else derives from it:
+**`src/lib/levels.ts` is the single source of truth for the 1-12 scale.** The API does **not** read `level` from the solver — `TECHNIQUE_LEVELS` maps each technique id 1–60 to a level and everything derives from it: board level = `levelForBitmask(mask)` (max over bitmask, in `src/lib/bitmask.ts`); hint level = `levelForTechnique(hints.technique)` (in `solver.ts`); `boards.level` via `backfill-board-difficulty.ts`; `techniques.level` via `verify-technique-levels.ts`. The solver's `level` is overwritten so a solver rebalance or old deployment can't change what clients see; its `difficulty_score` is what the bands are built on.
 
-| What | How | Where |
-| ---- | --- | ----- |
-| board level (`/solver/validate`, `/solver/generate`) | `levelForBitmask(mask)` — max level over the techniques bitmask | `toValidateResponseData()` in `src/lib/bitmask.ts` |
-| hint level (`/solver/solve`) | `levelForTechnique(hints.technique)` | `handleSolveRequest()` in `src/routes/solver.ts` |
-| `boards.level` column | `levelForBitmask()` at backfill time | `scripts/backfill-board-difficulty.ts` |
-| `techniques.level` column | denormalised copy of the map | `scripts/verify-technique-levels.ts` |
+**Invariant:** `level` must be a non-decreasing banding of `difficulty_score` (the solver tries techniques easiest-first by score), and no technique may sit below one it builds on. `src/lib/levels.test.ts` enforces this plus all 12 levels non-empty.
 
-The solver still *sends* a `level`; it is overwritten. That is deliberate — it
-means a solver rebalance, or an old deployment answering, can no longer change
-the level a client sees, and a level change ships from this repo alone.
+**To change a technique's level:** edit `TECHNIQUE_LEVELS` → `bun run test:unit` (invariants) → `bun run scripts/verify-technique-levels.ts --fix` (sync `techniques.level`) → `bun run scripts/backfill-board-difficulty.ts` (~2h against prod solver). A `difficulty_score` change, by contrast, is a `sudojo_solver` change (`GetDifficultyScore`) — deploy it first, then backfill.
 
-**Invariant:** `level` must be a non-decreasing banding of the solver's
-`difficulty_score`, because the solver tries techniques easiest-first by score.
-If a higher-scoring technique sat at a lower level, a board could be labelled
-easier than the hardest step its solve needed. `src/lib/levels.test.ts` enforces
-this, that all 12 levels are non-empty, and that no technique sits below a
-technique it builds on.
+## Database
 
-**Level shape (owner's decision, Sept 2026):** Full House is 1, the singles 2,
-Naked/Hidden Pair 3. Locked Candidates and Unique Rectangle Type 1 open level 4
-and score 13 in `sudojo_solver`, just above the pairs, so the invariant holds
-with no exemptions. Levels 4-12 are banded to even out boards per level. A score
-change is a `sudojo_solver` change (`GetDifficultyScore`, deploy it first): it
-alters the try-order, so boards' technique bitmasks change and the backfill
-must follow.
+- Schema lives in **two places**: raw `CREATE TABLE IF NOT EXISTS` / `ALTER TABLE … ADD COLUMN IF NOT EXISTS` SQL in `src/db/index.ts` (what runs), and Drizzle defs in `src/db/schema.ts` (types/queries). `drizzle-kit` is installed but has no config/migrations. Migrations are forward-only. When adding a column, put the `ALTER` **after** the table's `CREATE` (743dbc3 fixed a fresh-DB bootstrap break).
+- `initDatabase()` seeds idempotently: strategy rows, technique→strategy mappings, level `entitlement`/`offer_id`.
+- Core tables: `levels`, `strategies` (17), `techniques`, `learning`, `boards`, `dailies`, `challenges`, `access_logs` (leftover from the deleted gate; created, never written), `technique_examples`, `technique_practices`, `communities`. Gamification: `user_stats` (has `status` for soft delete), `badge_definitions`, `user_badges`, `game_sessions`, `point_transactions`.
+- **Technique bitmasks** use `1n << BigInt(techniqueId)` (ids 1–60), so values exceed 2^53. `boards.techniques`, `dailies.techniques`, `technique_examples.techniques_bitfield`, `game_sessions.techniques` are `bigint({ mode: "bigint" })` (JS `bigint` in/out). `user_stats.total_points` is not a bitmask → `mode: "number"`. SQL counting uses `1::bigint << t`.
 
-**To change a technique's level:**
+## Gamification
 
-1. Edit `TECHNIQUE_LEVELS` in `src/lib/levels.ts`.
-2. `bun run test:unit` — the invariants above must still hold.
-3. `bun run scripts/verify-technique-levels.ts --fix` — sync `techniques.level`.
-4. `bun run scripts/backfill-board-difficulty.ts` — re-derive every board's level
-   (~2h against the production solver, which saturates at ~17 boards/s).
-
-Nothing needs to ship in `sudojo_solver`.
-
-## Cross-Repo Contracts
-
-| Sibling | Direction | Contract |
-|---------|-----------|----------|
-| `sudojo_solver` (C# `SudokuApi`) | API → solver | `GET ${SOLVER_URL}/api/solve?original&user&autopencilmarks&pencilmarks[&techniques]`, `/api/validate?original[&brutalForce]`, `/api/generate[?symmetrical]`. Envelope `{ success, error: {code,message}, data }`, where `code` is an integer 0–3 (`SolverErrorCode` in `solver-proxy.ts`), not a string. `/validate` and `/generate` `data.board` carries `techniques` (a JSON number, rounded above 2^53) and `techniques_bitmask` (the same ulong as a decimal string). Read it with `solverBitmask()`, which prefers the string and falls back to `BigInt(techniques)` for older solvers (may lack low bits, never invents any; never use `String(techniques)`: `String(2 ** 57)` is 2^57 − 2). `hints.technique === 0` means an auto-pencilmark hint. Technique ids 1–60 mirror `SudokuEngine/SudokuDefines.h`. **The solver's `level` is ignored:** this API re-derives every level from `src/lib/levels.ts` (see [Difficulty Levels](#difficulty-levels)). The solver's `difficulty_score` is still passed through and is what the level bands are built on |
-| `sudojo_ocr_ml` | API → ML | `POST ${OCR_ML_URL}/v1/ocr` `{ image, min_clues }` → `OCRExtractData` plus `debug`. 422 means too few clues |
-| `@sudobility/sudojo_types` `^1.2.67` | dep | Response envelope helpers, all entity/response types, `EMPTY_BOARD`, `scrambleBoard`, `techniqueToBit`. New shared shapes go there first. The `_bitmask` response fields are not in the published version yet, so `src/lib/bitmask.ts` extends `Board` / `Daily` / `TechniqueExample` / `ValidateBoardData` locally with intersection types (`BoardResponse` etc., marked `TODO(sudojo_types)`). Its `techniqueToBit` / `addTechnique` / `hasTechnique` return or take JS numbers, so they are lossy for ids ≥ 54. Use `techniqueBit()` from `src/lib/bitmask.ts` instead |
-| `@sudobility/sudojo_ocr` | dep | Board detection + crop, then recognition via paddle_ocr (`extractSudokuFromImage`, `/node` canvas adapter). No Tesseract |
-| `paddle_ocr` | API → OCR | `POST ${PADDLE_OCR_URL}/v1/ocr` `{ image }` → `{ blocks[] }`. Generic text OCR; sudojo_ocr maps blocks to the 81 cells |
-| `@sudobility/auth_service` `^1.1.21`, `@sudobility/subscription_service` `^1.0.23`, `@sudobility/types` `^1.9.67` | dep | Firebase verify/admin/delete, RevenueCat, `UserStatus`/`NONE_ENTITLEMENT` |
-| `@sudobility/test-db-guard` `1.0.2` | devDep | `scrubDatabaseUrl()` / `setupTestDatabase()` localhost guard |
-| `@sudobility/sudojo_client` | consumer | Typed endpoint map in `sudojo_client/src/network/sudojo-client.ts`. Keep it in sync when you add or rename routes |
-| `sudojo_app` / `sudojo_app_rn` / `sudojo_extension` | consumers | Base URL `VITE_API_URL` / `EXPO_PUBLIC_API_URL` (default `https://api.sudojo.com`). The extension calls `/api/v1/ocr/extract` directly |
-| All bitmask consumers | API → apps | Every bitmask response field is sent twice: `techniques` (number, lossy, kept for store builds) plus `techniques_bitmask` (exact decimal string), and `techniques_bitfield` plus `techniques_bitfield_bitmask`. Clients should read the string with `BigInt(...)`. Inputs (bodies, `/boards?techniques=&technique_bit=`) accept a number or a decimal string. Full table: [docs/API.md#technique-bitmasks](docs/API.md#technique-bitmasks) |
-| `sudojo_bot` | consumer | `SOLVER_API_URL` (default `http://localhost:3000`) → `/api/v1/solver/solve`, `/validate` |
-| i18n | consumers | Responses carry `localization` string keys (`levels.<n>.*`, `techniques.<path>.*`, `badges.<key>.*`, `learning.<path>.<i>`). Hint steps carry `{ text, title }`. Clients resolve these against their locale files (e.g. `sudojo_app/public/locales/*/`) |
-| `sudojo_app/docs/communities.md` | input | Read by `src/scripts/seed-communities.ts` through a sibling-relative path |
-
-## Testing
-
-- **One test runner, two configs.** Everything is vitest. `bun run test` (`vitest.config.ts`) excludes `**/*.db.test.ts`, so a CI run cannot reach a database. `bun run test:db` (`vitest.db.config.ts`) collects only those files and is run by hand.
-- **`TEST_DATABASE_URL`, not `DATABASE_URL`.** `tests/setup.db.ts` validates it points at exactly `localhost` (`127.0.0.1` is refused) before assigning `DATABASE_URL`. This replaced a `dbUrl.includes("_test")` substring check that passed for any database whose name contained "test".
-- **`tests/setup.db.ts` loads `.env.test` itself**, because `bunfig.toml`'s `[test.env]` was Bun test-runner config that vitest ignores. It loads that file *only* -- never `.env`, which holds a remote `DATABASE_URL` -- and never overrides a variable already in the environment, so an explicitly exported `TEST_DATABASE_URL` wins over the file. Without that precedence the guard can never be exercised against a bad value.
-- **Module mocks are `vi.mock` in `tests/setup.db.ts`**, converted from `bun:test`'s `mock.module`. `vi.mock` is hoisted, so the mock factories inline their string literals rather than referencing module-level consts -- a const would fail with "cannot access before initialization". Keep them in sync with `tests/db-helpers.ts`.
-- **Test helpers live in `tests/db-helpers.ts`**, not the setup file. Setup files run for the whole suite; helpers are imported per test file.
-- **`.env.test` is gitignored** because it holds live credentials. `.env.test.example` is the committed template.
-- Only Firebase is mocked (`test-firebase-token` → admin `test@example.com`). The `vi.mock("../src/services/revenuecat")` factory targets a module that no longer exists, so subscription checks use whatever `REVENUECAT_API_KEY` is in `.env.test`.
-- `solver*.db.test.ts` call a **live solver** at `.env.test`'s `SOLVER_URL` (template: `http://localhost:8080`). `setupTestDatabase()` wipes core tables once per file (`beforeAll`). `vitest.db.config.ts` sets `fileParallelism: false`.
-- Both configs inline `@sudobility/auth_service` and `subscription_service` (`server.deps.inline`) because their extensionless ESM imports break Node's resolver.
+- `POST /play/start` stores one `game_sessions` row per user (replacing older).
+- A hint from `GET /solver/solve` whose `original` matches the active session awards `2 × hints.level` points and sets `hintUsed`.
+- `POST /play/finish` computes `2^level × 10 (no hints) × 2 (not interrupted)`; interrupted = client `elapsedTime` >1s below server time. Perfect play raises `userLevel` and awards `level_<n>`. Milestone `games_<5…10000>` badges exist. Every change writes a `point_transactions` row.
 
 ## Conventions
 
-- Validate every body and param with Zod from `src/schemas/index.ts` via `zValidator`. Query strings are parsed by hand in handlers.
-- Respond with `successResponse()` / `errorResponse()`. Each route file `export default`s its `Hono` router, and you register it in `src/routes/index.ts`.
-- Attach i18n keys through `src/lib/localization.ts` helpers, not literal strings.
-- Technique bitmasks are `bigint` everywhere inside the API, and everything goes through `src/lib/bitmask.ts`. Parse input with `parseBitmask()` (the `bitmask` zod helper in `src/schemas/index.ts` uses it). Bind SQL with `bitmaskParam(value)`, which renders `$n::bigint` with a decimal-string param, never a JS number. Build bits with `techniqueBit(id)`. Pass every row with a bitmask column through `toBitmaskFields()` before `c.json`, because `JSON.stringify` throws on `bigint`. `toBitmaskFields()` emits `<field>` as a number and `<field>_bitmask` as the exact string. `tests/unit/bitmask-routes.test.ts` hits every such endpoint and fails if a `bigint` reaches a response.
-- Env access goes through `getEnv` / `getRequiredEnv`, never `process.env` directly in `src/`.
-- Prettier: double quotes, semicolons, width 80, 2 spaces, trailing commas `es5`, `arrowParens: avoid`, LF. ESLint: `no-unused-vars` ignores `^_`, `prefer-const`, `no-var`, `no-duplicate-imports`, `no-explicit-any` off.
-- Commits are mostly `type: summary` or `type(scope): summary`. Releases bump `package.json` `version` (e.g. "bump version to 1.0.161").
+- Validate every body/param with Zod from `src/schemas/index.ts` via `zValidator`; query strings are parsed by hand in handlers.
+- Respond with `successResponse()` / `errorResponse()`. Each route `export default`s its `Hono` router; register it in `src/routes/index.ts`. Attach i18n keys via `src/lib/localization.ts` helpers, not literal strings.
+- **Bitmasks are `bigint` everywhere inside the API** and go through `src/lib/bitmask.ts`: parse input with `parseBitmask()` (the `bitmask` zod helper), bind SQL with `bitmaskParam(value)` (`$n::bigint` with a decimal-string param, never a JS number), build bits with `techniqueBit(id)`. Pass every row with a bitmask column through `toBitmaskFields()` before `c.json` — `JSON.stringify` throws on `bigint`. It emits `<field>` as a (lossy) number and `<field>_bitmask` as the exact string. `tests/unit/bitmask-routes.test.ts` fails if a `bigint` reaches a response.
+- Prefer `techniqueBit()` over `@sudobility/sudojo_types`' `techniqueToBit`/`addTechnique`/`hasTechnique`, which take/return JS numbers and are lossy for ids ≥ 54.
+- Prettier: double quotes, semicolons, width 80, 2 spaces, trailing commas `es5`, `arrowParens: avoid`, LF. ESLint: `no-unused-vars` ignores `^_`, `no-explicit-any` off.
+- Commits are `type: summary` / `type(scope): summary`. Releases bump `package.json` `version`.
+
+## Testing
+
+- **One runner, two configs.** `bun run test` (`vitest.config.ts`) excludes `**/*.db.test.ts` so CI can't reach a DB; `bun run test:db` (`vitest.db.config.ts`) collects only those, run by hand (`fileParallelism: false`).
+- **`TEST_DATABASE_URL`, not `DATABASE_URL`.** `tests/setup.db.ts` validates it is exactly `localhost` before assigning `DATABASE_URL`, loads `.env.test` **only** (never `.env`), and never overrides an already-set env var. `.env.test` is gitignored (live creds); `.env.test.example` is the template.
+- Only Firebase is mocked via `vi.mock` in `tests/setup.db.ts` (`test-firebase-token` → admin `test@example.com`); hoisted, so factories inline string literals (a const errors "cannot access before initialization"). Keep in sync with `tests/db-helpers.ts`. `solver*.db.test.ts` call a **live solver** at `.env.test`'s `SOLVER_URL`.
+- Both configs inline `@sudobility/auth_service` + `subscription_service` (`server.deps.inline`) — their extensionless ESM imports break Node's resolver.
 
 ## Deploy
 
-CI (`.github/workflows/ci-cd.yml` → `johnqh/workflows/.github/workflows/unified-cicd.yml@main`) runs on pushes and PRs to `main`/`develop`. The steps are `bun install`, `typecheck`, `lint`, `test`, and `build`. On `main` only, it then builds the Dockerfile and pushes `<DOCKERHUB_USERNAME>/sudojo_api` tagged with the `package.json` version (`NPM_TOKEN` build arg for private packages). `develop` runs tests only, and there is no npm publish. The runtime image runs `bun run src/index.ts` from TS source and contains only `src/` and prod deps.
+CI (`.github/workflows/ci-cd.yml` → `johnqh/workflows/.../unified-cicd.yml@main`) runs on pushes/PRs to `main`/`develop`: `bun install`, `typecheck`, `lint`, `test`, `build`. On `main` only it builds the Dockerfile and pushes `<DOCKERHUB_USERNAME>/sudojo_api` tagged with the `package.json` version. `develop` runs tests only; **no npm publish** (`skip-npm-publish: true`, `publish-target: github`). The Dockerfile authenticates to GitHub Packages with a `GH_PACKAGES_TOKEN` build arg; the runtime image runs `bun run src/index.ts` from TS source with prod deps only.
 
 ## Gotchas
 
-- Dynamic filters: each `.where()` call on a Drizzle `$dynamic()` builder **replaces** the previous condition. Collect conditions in an array and call `.where(and(...conditions))` once. Wrap raw `sql` that contains `OR` in parentheses, because `and()` does not. (Fixed in `GET /boards`, which used to apply only the last of `level` / `technique_bit` / `techniques`; covered by `tests/unit/boards-route.test.ts`.)
-- Bitmask columns are `mode: "bigint"`, so a new route that returns one of these rows without `toBitmaskFields()` fails at runtime with `TypeError: Do not know how to serialize a BigInt`. Add it to `tests/unit/bitmask-routes.test.ts`. The numeric `techniques` / `techniques_bitfield` response fields are still rounded above 2^53, which is deliberate for old store builds. Only `<field>_bitmask` is exact. `boards.techniques`, `dailies.techniques`, and `technique_examples.techniques_bitfield` are now created as `BIGINT`. They used to be created as `INTEGER`, which couldn't store bits ≥ 31. `initDatabase()` widens a leftover `INTEGER` column through `widenColumnToBigint()`, which does nothing once the column is `BIGINT`. `tests/unit/db-init.test.ts` fails if any Drizzle `bigint` column is created with another type.
-- Hints are unrestricted by design (see Auth). There is no hint-tier or daily-limit code left. The `access_logs` table remains but is never written. Dropping it needs a migration decision.
-- `/dailies/today` uses the UTC date. A missing daily returns an unpersisted scrambled board with `uuid: "fallback-<date>"`.
-- `GET` responses under `/api/v1` are re-serialized by the encryption middleware whenever a key is set. Clients must decrypt `enc:` values.
-- Health `version` is hard-coded `"1.0.0"`. `/health` does not check the DB.
-- Scripts in `scripts/` and `src/scripts/` write to whatever `DATABASE_URL` resolves to, and Bun loads `.env` (remote). `update-technique-dependencies.ts` says to run with `bunx tsx`.
+- **Dynamic filters:** each `.where()` on a Drizzle `$dynamic()` builder **replaces** the previous. Collect conditions in an array → `.where(and(...conditions))` once. Wrap raw `sql` with `OR` in parens (`and()` does not). (Fixed in `GET /boards`; covered by `tests/unit/boards-route.test.ts`.)
+- **Bitmask columns are `mode: "bigint"`** → a route returning such a row without `toBitmaskFields()` throws `TypeError: Do not know how to serialize a BigInt`. These columns are now `BIGINT`; `initDatabase()` widens any leftover `INTEGER` via `widenColumnToBigint()`. `tests/unit/db-init.test.ts` fails if a Drizzle `bigint` column is created as another type.
+- `/dailies/today` uses the UTC date; a missing daily returns an unpersisted scrambled board `uuid: "fallback-<date>"`.
+- `GET` responses under `/api/v1` are re-serialized by the encryption middleware when a key is set — clients must decrypt `enc:` values.
+- Health `version` is hard-coded `"1.0.0"`; `/health` does not check the DB.
+- Scripts in `scripts/` and `src/scripts/` write to whatever `DATABASE_URL` resolves to, and Bun loads `.env` (**remote**). `update-technique-dependencies.ts` says to run with `bunx tsx`.
+- `access_logs` remains but is never written; dropping it needs a migration decision.
 - `.claude/settings.local.json` is committed even though `.gitignore` lists it.
 
 ## Common Tasks
 
-### Add an endpoint
-1. Add a handler to `src/routes/<module>.ts` (or create a module and register it in `src/routes/index.ts`).
-2. Add Zod schemas in `src/schemas/index.ts` and unit cases in `tests/unit/schemas.test.ts`.
-3. Apply `adminMiddleware` / `firebaseAuthMiddleware` as appropriate.
-4. Add shared response types to `@sudobility/sudojo_types`, and add the path to `sudojo_client`'s endpoint map.
-5. Update `docs/API.md`.
+**Add an endpoint:** handler in `src/routes/<module>.ts` (or new module registered in `src/routes/index.ts`) → Zod schema in `src/schemas/index.ts` + cases in `tests/unit/schemas.test.ts` → apply `adminMiddleware`/`firebaseAuthMiddleware` → add shared types to `@sudobility/sudojo_types` and the path to `sudojo_client`'s endpoint map → update `docs/API.md`.
 
-### Add a table or column
-1. Add the Drizzle definition in `src/db/schema.ts`. A technique bitmask column is `bigint({ mode: "bigint" })`, its name goes in `BITMASK_FIELDS` in `src/lib/bitmask.ts`, and its responses go through `toBitmaskFields()`.
-2. Add the raw SQL in `src/db/index.ts` (`CREATE TABLE IF NOT EXISTS` / `ALTER TABLE … ADD COLUMN IF NOT EXISTS`, placed after the table's CREATE).
-3. `bun run db:init` applies it (so does any server start).
+**Add a table/column:** Drizzle def in `src/db/schema.ts` (bitmask col = `bigint({ mode: "bigint" })`, name in `BITMASK_FIELDS`, responses through `toBitmaskFields()`) → raw SQL in `src/db/index.ts` after the table's CREATE → `bun run db:init`.
 
-## Git Workflow
+## Cross-Repo Contracts
 
-- Do not use feature branches for code changes. Always stay on the current branch.
+See the detailed table in **[docs/API.md](docs/API.md)**. Key points:
+- **`sudojo_solver`** (C#): `GET ${SOLVER_URL}/api/{solve,validate,generate}`, envelope `{ success, error:{code,message}, data }` where `code` is an integer 0–3 (`SolverErrorCode`). `/validate` & `/generate` `data.board` carries `techniques` (lossy JSON number) and `techniques_bitmask` (exact decimal string) — read with `solverBitmask()` (prefers the string). `hints.technique === 0` = auto-pencilmark hint. Technique ids 1–60 mirror `SudokuEngine/SudokuDefines.h`. Its `level` is ignored; `difficulty_score` is passed through.
+- **`@sudobility/sudojo_types`**: envelope helpers, entity/response types, `EMPTY_BOARD`, `scrambleBoard`. New shared shapes go here first. The `_bitmask` response fields aren't published yet, so `src/lib/bitmask.ts` extends `Board`/`Daily`/`TechniqueExample`/`ValidateBoardData` locally (`TODO(sudojo_types)`).
+- **Bitmask wire contract:** every bitmask field is sent twice — `techniques` (lossy number, kept for old store builds) + `techniques_bitmask` (exact decimal string); likewise `techniques_bitfield(+_bitmask)`. Clients read the string with `BigInt(...)`. Inputs accept a number or a decimal string.
+- **OCR:** `sudojo_ocr_ml` `POST ${OCR_ML_URL}/v1/ocr` `{ image, min_clues }` → `OCRExtractData` (422 = too few clues); `@sudobility/sudojo_ocr` does board detect+crop then paddle (`POST ${PADDLE_OCR_URL}/v1/ocr`), no Tesseract.
+- **i18n:** responses carry `localization` string keys (`levels.<n>.*`, `techniques.<path>.*`, `badges.<key>.*`, `learning.<path>.<i>`); clients resolve against locale files. `src/scripts/seed-communities.ts` reads `sudojo_app/docs/communities.md` via a sibling-relative path.
+- Dep versions live in `package.json` (`@sudobility/*` from GitHub Packages) — don't duplicate pins here.
