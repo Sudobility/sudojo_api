@@ -38,6 +38,7 @@ import gamificationRouter from "./gamification";
 import ocrRouter from "./ocr";
 import communitiesRouter from "./communities";
 import strategiesRouter from "./strategies";
+import resourcesRouter from "./resources";
 
 const routes = new Hono();
 
@@ -56,5 +57,6 @@ routes.route("/play", playRouter);
 routes.route("/gamification", gamificationRouter);
 routes.route("/ocr", ocrRouter);
 routes.route("/communities", communitiesRouter);
+routes.route("/resources", resourcesRouter);
 
 export default routes;

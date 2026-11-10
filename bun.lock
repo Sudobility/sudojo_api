@@ -8,6 +8,7 @@
         "@hono/zod-validator": "~0.7.6",
         "@napi-rs/canvas": "~0.1.100",
         "@sudobility/auth_service": "^1.1.32",
+        "@sudobility/resources_service": "^0.0.2",
         "@sudobility/subscription_service": "^1.0.34",
         "@sudobility/sudojo_ocr": "^1.1.57",
         "@sudobility/sudojo_types": "^1.2.81",
@@ -245,6 +246,8 @@
     "@standard-schema/spec": ["@standard-schema/spec@1.1.0", "", {}, "sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w=="],
 
     "@sudobility/auth_service": ["@sudobility/auth_service@1.1.32", "https://npm.pkg.github.com/download/@sudobility/auth_service/1.1.32/3d58eb9cad792119b1635432fe810acb6ec8a344", { "peerDependencies": { "@sudobility/types": "^1.9.79", "firebase-admin": "^13.0.0" } }, "sha512-muZmxahXn1GNUZvcZFhYUYu6CgmUgGHHmYPQyprsLwFB9sqdwI/mjJqkcav7SGTmMSX5qTQ3KARLeqLz0Wu33Q=="],
+
+    "@sudobility/resources_service": ["@sudobility/resources_service@0.0.2", "https://npm.pkg.github.com/download/@sudobility/resources_service/0.0.2/9b924e58afcb1f33432f0497b77588eec5650b5a", { "peerDependencies": { "drizzle-orm": ">=0.44.0" } }, "sha512-65GU5nxJdodPYCvrmSW+O8dsKELJUu3FVvmI+omSecO672OutSVyF4ApztD21q9zYxw4eHZsgNCrCIFglsICGA=="],
 
     "@sudobility/subscription_service": ["@sudobility/subscription_service@1.0.34", "https://npm.pkg.github.com/download/@sudobility/subscription_service/1.0.34/a1d4e84b3d0d56a7a55c101538c4ab8951135a3d", {}, "sha512-fC92cqRh536hOFYog+Y4LJochmDvPDIataybFj2xbHHja+fs+7dz9Zz79QbMTiD6Rr1zcxDa61xK3rprY2SE4g=="],
 
