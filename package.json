@@ -1,6 +1,6 @@
 {
   "name": "sudojo_api",
-  "version": "1.0.185",
+  "version": "1.0.186",
   "module": "src/index.ts",
   "type": "module",
   "private": true,
@@ -39,7 +39,7 @@
     "@hono/zod-validator": "~0.7.6",
     "@napi-rs/canvas": "~0.1.100",
     "@sudobility/auth_service": "^1.1.32",
-    "@sudobility/resources_service": "^0.0.2",
+    "@sudobility/resources_service": "^0.1.1",
     "@sudobility/subscription_service": "^1.0.34",
     "@sudobility/sudojo_ocr": "^1.1.57",
     "@sudobility/sudojo_types": "^1.2.81",
