@@ -1,52 +1,66 @@
-# Build stage
-FROM oven/bun:1 AS builder
+FROM --platform=${BUILDPLATFORM} oven/bun:latest
+ARG TARGETPLATFORM
+ARG TARGETARCH
+ARG TARGETVARIANT
+# Build information
+RUN printf "I'm building for TARGETPLATFORM=${TARGETPLATFORM}" \
+    && printf ", TARGETARCH=${TARGETARCH}" \
+    && printf ", TARGETVARIANT=${TARGETVARIANT} \n" \
+    && printf "With uname -s : " && uname -s \
+    && printf "and  uname -m : " && uname -m
 
-WORKDIR /app
-
-# Copy package files
-COPY package.json bun.lock ./
-
-# Install dependencies (including devDependencies for build)
-ARG GH_PACKAGES_TOKEN
-RUN echo "@sudobility:registry=https://npm.pkg.github.com" > ~/.npmrc && \
-    echo "//npm.pkg.github.com/:_authToken=${GH_PACKAGES_TOKEN}" >> ~/.npmrc && \
-    bun install --frozen-lockfile && \
-    rm ~/.npmrc
-
-# Copy source code
-COPY src ./src
-COPY tsconfig.json ./
-
-# Type check
-RUN bunx tsc --noEmit
-
-# Production stage
-FROM oven/bun:1-slim AS production
-
+# Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    dumb-init \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
+# Set working directory
 WORKDIR /app
 
-# Copy package files
-COPY package.json bun.lock ./
+# Create non-root user for security
+RUN groupadd -g 1001 appuser && \
+    useradd -r -u 1001 -g appuser appuser
 
-# Install production dependencies only
-ARG GH_PACKAGES_TOKEN
-RUN echo "@sudobility:registry=https://npm.pkg.github.com" > ~/.npmrc && \
-    echo "//npm.pkg.github.com/:_authToken=${GH_PACKAGES_TOKEN}" >> ~/.npmrc && \
-    bun install --frozen-lockfile --production && \
-    rm ~/.npmrc
+# Copy package files first for better caching.
+#
+# Every one of these is optional except package.json, and the trailing `*` is
+# what says so: a COPY whose glob matches nothing succeeds, while a bare name
+# that is absent fails the build. `bunfig.toml` learned that the hard way — it
+# held only `[test] preload`, which is Bun test-runner config that never ran
+# because the test script is vitest, so it was deleted as dead config and this
+# line failed the image build on the next push.
+COPY package.json bun.lock* bunfig.toml* ./
 
-# Copy source code (Bun runs TypeScript directly)
-COPY src ./src
+# Install dependencies. The private @sudobility registry token is a BuildKit
+# secret (never a build-arg or an image layer — the old split RUN left it in an
+# intermediate layer). CI passes it via docker/build-push-action `secrets:`;
+# locally: docker build --secret id=gh_packages_token,env=GH_PACKAGES_READ_TOKEN
+RUN --mount=type=secret,id=gh_packages_token \
+    printf '@sudobility:registry=https://npm.pkg.github.com\n//npm.pkg.github.com/:_authToken=%s\n' \
+      "$(cat /run/secrets/gh_packages_token)" > ~/.npmrc && \
+    bun install --production && \
+    rm -f ~/.npmrc
 
-# Set environment
-ENV NODE_ENV=production
+# Copy source code
+COPY . .
+
+# Create logs directory and set permissions
+RUN mkdir -p /app/logs && \
+    chown -R appuser:appuser /app
+
+# Switch to non-root user
+USER appuser
 
 # Expose port
 EXPOSE 8010
 
-# Start the application
-CMD ["bun", "run", "src/index.ts"]
+# Health check
+HEALTHCHECK --interval=30s --timeout=15s --start-period=30s --retries=3 \
+  CMD curl -f http://localhost:${PORT:-8010}/health || exit 1
+
+# Use dumb-init as process manager
+ENTRYPOINT ["/usr/bin/dumb-init", "--"]
+
+# Start the API server
+CMD ["bun", "run", "start"]
