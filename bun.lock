@@ -7,12 +7,12 @@
       "dependencies": {
         "@hono/zod-validator": "~0.7.6",
         "@napi-rs/canvas": "~0.1.100",
-        "@sudobility/auth_service": "^1.1.32",
-        "@sudobility/resources_service": "^0.1.1",
-        "@sudobility/subscription_service": "^1.0.34",
-        "@sudobility/sudojo_ocr": "^1.1.57",
-        "@sudobility/sudojo_types": "^1.2.81",
-        "@sudobility/types": "^1.9.79",
+        "@sudobility/auth_service": "^1.1.33",
+        "@sudobility/resources_service": "^0.1.2",
+        "@sudobility/subscription_service": "^1.0.35",
+        "@sudobility/sudojo_ocr": "^1.1.58",
+        "@sudobility/sudojo_types": "^1.2.82",
+        "@sudobility/types": "^1.10.1",
         "drizzle-orm": "~0.45.4",
         "firebase-admin": "~13.10.0",
         "hono": "~4.11.5",
@@ -245,19 +245,19 @@
 
     "@standard-schema/spec": ["@standard-schema/spec@1.1.0", "", {}, "sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w=="],
 
-    "@sudobility/auth_service": ["@sudobility/auth_service@1.1.32", "https://npm.pkg.github.com/download/@sudobility/auth_service/1.1.32/3d58eb9cad792119b1635432fe810acb6ec8a344", { "peerDependencies": { "@sudobility/types": "^1.9.79", "firebase-admin": "^13.0.0" } }, "sha512-muZmxahXn1GNUZvcZFhYUYu6CgmUgGHHmYPQyprsLwFB9sqdwI/mjJqkcav7SGTmMSX5qTQ3KARLeqLz0Wu33Q=="],
+    "@sudobility/auth_service": ["@sudobility/auth_service@1.1.33", "https://npm.pkg.github.com/download/@sudobility/auth_service/1.1.33/83984a00fbc2cd25344530bc75f0a9fb00de95a8", { "peerDependencies": { "@sudobility/types": "^1.10.1", "firebase-admin": "^13.0.0" } }, "sha512-rPse4uRAGTonB0Dg8hYPaxOQVfVC/COwZmJP0EUWVMBRFkCiRsOO+5iRf6OBGtEf8ai5vT0iOXAHj5ep6pUriA=="],
 
-    "@sudobility/resources_service": ["@sudobility/resources_service@0.1.1", "https://npm.pkg.github.com/download/@sudobility/resources_service/0.1.1/72e7464a7b0d733a932b8a6fda8afdfdc5870b1f", { "peerDependencies": { "drizzle-orm": ">=0.44.0" } }, "sha512-S+jhVzOKMhMV2ci5cNkb0lyQA3Qz0/lzuYXjrSuX6sufNuEPGNVwBN19z/Q05pB7sh2a7fYqDjSqN2ybbT/Snw=="],
+    "@sudobility/resources_service": ["@sudobility/resources_service@0.1.2", "https://npm.pkg.github.com/download/@sudobility/resources_service/0.1.2/d1f9da7b08956c0365c04ecb590eecdb6c171268", { "peerDependencies": { "@sudobility/types": "^1.10.1", "drizzle-orm": ">=0.44.0" } }, "sha512-doT/lttqs64tIZt9I3rgtYxXHas2TR+rbjoeyNMiPQFw7DR0jDBbfbDwiqRSVyjoZh2FdVgK2zsq/AGC6KCLGg=="],
 
-    "@sudobility/subscription_service": ["@sudobility/subscription_service@1.0.34", "https://npm.pkg.github.com/download/@sudobility/subscription_service/1.0.34/a1d4e84b3d0d56a7a55c101538c4ab8951135a3d", {}, "sha512-fC92cqRh536hOFYog+Y4LJochmDvPDIataybFj2xbHHja+fs+7dz9Zz79QbMTiD6Rr1zcxDa61xK3rprY2SE4g=="],
+    "@sudobility/subscription_service": ["@sudobility/subscription_service@1.0.35", "https://npm.pkg.github.com/download/@sudobility/subscription_service/1.0.35/e33e00b30c0f648ec3c56fb96062ea56b32289a5", {}, "sha512-WO19m2o+wp1ti/tglM1sgW01VYhz93zvQX7rRaBhzSaKim6vpsYoR8X5kInTg2nKequMpe0UxAga2NXMM6SBEA=="],
 
-    "@sudobility/sudojo_ocr": ["@sudobility/sudojo_ocr@1.1.57", "https://npm.pkg.github.com/download/@sudobility/sudojo_ocr/1.1.57/eb976fbce8fe598005395bb3a9a147748256a330", { "peerDependencies": { "@sudobility/sudojo_types": "^1.2.81" } }, "sha512-sxEKxelrjSSSUvKjwaJ7b6G9xxP4vbmKyEUYoe/3GHVhY/wzlTqh0e8J4vY6yx4kDWaqLHAR+YzDGebWRACPcA=="],
+    "@sudobility/sudojo_ocr": ["@sudobility/sudojo_ocr@1.1.58", "https://npm.pkg.github.com/download/@sudobility/sudojo_ocr/1.1.58/122dc5fd528918af53147a317646de88a327d22d", { "peerDependencies": { "@sudobility/sudojo_types": "^1.2.82" } }, "sha512-NnxNLcxNgB6PVH1NVJ5GQmf/uV+VTMMKBsaJX7OiEFJR07im0riF1M0EtBtJ4fPT30W6Q8rWcCGO6ZzDNmdGCA=="],
 
-    "@sudobility/sudojo_types": ["@sudobility/sudojo_types@1.2.81", "https://npm.pkg.github.com/download/@sudobility/sudojo_types/1.2.81/d2b3c122198e4fe86d6abecaab8f2126fe07f00a", { "peerDependencies": { "@sudobility/types": "^1.9.79" } }, "sha512-i1b+an8HyFjAue6mN4zzSSuJ+KhouoeRAfilFXEFnJecdiexirCWcpBufIHRa8bgk+Gi/cGNik7AoUn20fEiVQ=="],
+    "@sudobility/sudojo_types": ["@sudobility/sudojo_types@1.2.82", "https://npm.pkg.github.com/download/@sudobility/sudojo_types/1.2.82/ee6305d41c0ee84e98ebc9df5e2b049eef138ede", { "peerDependencies": { "@sudobility/types": "^1.10.1" } }, "sha512-Hmg1fWPJ4UTIzzogie9IayZFyr9iKL1aU2Bn5Z7DZ46GfiaKS8FpVTXtWYmQNyG1uDd9/tQAQCfhr0htvdpRFA=="],
 
     "@sudobility/test-db-guard": ["@sudobility/test-db-guard@1.0.3", "https://npm.pkg.github.com/download/@sudobility/test-db-guard/1.0.3/1b60364ccb30369e4ddc9a005ffdf03ea2644a65", {}, "sha512-VLYACu7PMDG4hqO9g5y/E0NOgDNS5HnG+UU/jr5Po0S5zrZv80i51rxwC2sOVX8gbyR04s632OoMULFiju4aZw=="],
 
-    "@sudobility/types": ["@sudobility/types@1.9.79", "https://npm.pkg.github.com/download/@sudobility/types/1.9.79/59975e39d6ab7e215418a489ef3cfe214b7521f4", {}, "sha512-rRtDT++fVy+I1m6E31fq752lxCQytFzwfqpJe5wDMPLcC1rJOBa7v+4+5e3cmX8VV1CsuLg8PTLMFe6A7AELRQ=="],
+    "@sudobility/types": ["@sudobility/types@1.10.1", "https://npm.pkg.github.com/download/@sudobility/types/1.10.1/8e353f55822e0bc3fa9555dfe3aee593e140c012", {}, "sha512-LmJyjDDY5rHDET1wstkT0i59SSOrOXijL2iqrgfcK6VHtKcBEw7FFpbw4CyHn+dhR9kqkYpEydSfypoqw7crMg=="],
 
     "@tootallnate/once": ["@tootallnate/once@2.0.1", "", {}, "sha512-HqmEUIGRJ5fSXchkVgR5F7qn48bDBzv0kWj/Kfu5e6uci4UlEeng4331LnBkWffb++Ei3FOVLxo8JJWMFBDMeQ=="],
 
