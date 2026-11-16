@@ -15,7 +15,7 @@ import {
   successResponse,
   errorResponse,
   type HealthCheckData,
-} from "@sudobility/sudojo_types";
+} from "@sudobility/types";
 import { getEnv } from "./lib/env-helper";
 import { encryptSolutionsMiddleware } from "./middleware/encryptSolutions";
 
@@ -27,7 +27,6 @@ app.use("*", cors());
 
 // Health check endpoints
 const healthResponse: HealthCheckData = {
-  name: "Sudojo API",
   version: "1.0.0",
   status: "healthy",
 };

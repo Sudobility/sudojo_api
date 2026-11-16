@@ -4,7 +4,7 @@
 
 import type { Context, Next } from "hono";
 import { verifyIdToken, isSiteAdmin } from "../services/firebase";
-import { errorResponse } from "@sudobility/sudojo_types";
+import { errorResponse } from "@sudobility/types";
 
 /**
  * Middleware that requires Firebase authentication and admin email.

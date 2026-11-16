@@ -9,7 +9,7 @@ import {
   isAnonymousUser,
   isSiteAdmin,
 } from "../services/firebase";
-import { errorResponse } from "@sudobility/sudojo_types";
+import { errorResponse } from "@sudobility/types";
 
 declare module "hono" {
   interface ContextVariableMap {
